@@ -2,9 +2,9 @@ use std::{mem::size_of, slice};
 
 use glow::HasContext;
 
-pub struct Renderer {
-	gl: glow::Context
-}
+use crate::window;
+
+pub struct Renderer;
 
 type Vertex = [f32; 3];
 
@@ -13,8 +13,8 @@ const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0
 const VERTEX_SHADER: &str = include_str!("./shaders/test.vert.glsl");
 const FRAGMENT_SHADER: &str = include_str!("./shaders/test.frag.glsl");
 
-impl Renderer {
-	pub fn new(gl: glow::Context) -> Self {
+impl window::Renderer for Renderer {
+	fn init(&mut self, gl: &glow::Context) {
 		unsafe {
 			let vertex_array = gl
 				.create_vertex_array()
@@ -59,13 +59,18 @@ impl Renderer {
 			gl.delete_shader(fragment_shader);
 			gl.use_program(Some(shader_program));
 		}
-		Self { gl }
 	}
 
-	pub fn draw(&self) {
+	fn draw(&mut self, gl: &glow::Context) {
 		unsafe {
-			self.gl.clear(glow::COLOR_BUFFER_BIT);
-			self.gl.draw_arrays(glow::TRIANGLES, 0, 3);
+			gl.clear(glow::COLOR_BUFFER_BIT);
+			gl.draw_arrays(glow::TRIANGLES, 0, 3);
 		}
+	}
+}
+
+impl Renderer {
+	pub fn new() -> Self {
+		Self {}
 	}
 }

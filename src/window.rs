@@ -1,93 +1,139 @@
-use std::num::NonZeroU32;
+use std::{ffi::CString, num::NonZeroU32};
 
 use glutin::{
 	config::{Config, ConfigTemplateBuilder},
-	context::{ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext},
-	display::GetGlDisplay,
+	context::{ContextAttributesBuilder, PossiblyCurrentContext},
+	display::{Display, GetGlDisplay},
 	prelude::{GlConfig, GlDisplay, NotCurrentGlContextSurfaceAccessor},
-	surface::{GlSurface, Surface, WindowSurface}
+	surface::{GlSurface, Surface, SurfaceAttributesBuilder, WindowSurface}
 };
 use glutin_winit::{DisplayBuilder, GlWindow};
 use raw_window_handle::HasRawWindowHandle;
 use winit::{
 	event::{Event, WindowEvent},
-	event_loop::{EventLoop, EventLoopBuilder},
+	event_loop::EventLoop,
 	window::WindowBuilder
 };
 
-struct WindowState {
-	gl_context: PossiblyCurrentContext,
-	gl_surface: Surface<WindowSurface>
+pub trait Renderer {
+	fn init(&mut self, gl: &glow::Context);
+
+	fn draw(&mut self, gl: &glow::Context);
 }
 
 pub struct Window {
-	window: Option<winit::window::Window>,
+	window: winit::window::Window,
 	event_loop: EventLoop<()>,
-	gl_config: Config,
-	gl_inactive_context: NotCurrentContext
+	gl: glow::Context,
+	gl_surface: Surface<WindowSurface>,
+	gl_context: PossiblyCurrentContext,
+	renderer: Box<dyn Renderer>
 }
 
 impl Window {
-	pub fn new(title: &str) -> Self {
-		let event_loop = EventLoopBuilder::new().build();
-		let window_builder = WindowBuilder::new().with_title(title);
-		let template = ConfigTemplateBuilder::new();
-		let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
-		let (mut window, gl_config) = display_builder
-			.build(&event_loop, template, Self::select_gl_config)
-			.expect("Failed to create window");
-
-		let raw_window_handle = window.as_ref().map(|window| window.raw_window_handle());
-		let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
+	pub fn new(title: &str, mut renderer: Box<dyn Renderer>) -> Self {
+		let event_loop = EventLoop::new();
+		let (window, gl_config) = Self::create_window(title, &event_loop);
 		let gl_display = gl_config.display();
-		let gl_context = unsafe { gl_display.create_context(&gl_config, &context_attributes) }
-			.expect("Failed to create context");
+		let gl_surface = Self::create_surface(&window, &gl_display, &gl_config);
+		let gl_context = Self::create_active_context(&window, &gl_display, &gl_config, &gl_surface);
+		let gl = Self::gl(&gl_display);
+
+		renderer.init(&gl);
 
 		Self {
 			window,
+			renderer,
 			event_loop,
-			gl_config,
-			gl_inactive_context: gl_context
+			gl,
+			gl_surface,
+			gl_context
 		}
 	}
 
-	pub fn run(self) {
-		let mut state: Option<WindowState> = None;
-		self.event_loop
-			.run(move |event, window_target, control_flow| {
-				control_flow.set_wait();
-				match event {
-					Event::Resumed => {
-						// state = Some(self.activate());
+	pub fn run(mut self) {
+		let event_loop = self.event_loop;
+		event_loop.run(move |window_event, _window_target, control_flow| {
+			control_flow.set_wait();
+			match window_event {
+				Event::WindowEvent { event, .. } => match event {
+					WindowEvent::Resized(size) => {
+						if size.width == 0 || size.height == 0 {
+							return;
+						}
+						self.gl_surface.resize(
+							&self.gl_context,
+							NonZeroU32::new(size.width).unwrap(),
+							NonZeroU32::new(size.height).unwrap()
+						);
 					}
-					Event::WindowEvent { event, .. } => match event {
-						WindowEvent::Resized(size) => {
-							if size.width == 0 || size.height == 0 {
-								return;
-							}
-							let Some(WindowState {
-								gl_context,
-								gl_surface
-							}) = &state else {
-								return;
-							};
-							gl_surface.resize(
-								gl_context,
-								NonZeroU32::new(size.width).unwrap(),
-								NonZeroU32::new(size.height).unwrap()
-							);
-						}
-						WindowEvent::CloseRequested => {
-							control_flow.set_exit();
-						}
-						_ => ()
-					},
+					WindowEvent::CloseRequested => {
+						control_flow.set_exit();
+					}
 					_ => ()
+				},
+				Event::RedrawRequested(_) => {
+					self.renderer.draw(&self.gl);
 				}
-			})
+				Event::RedrawEventsCleared => {
+					self.window.request_redraw();
+					self.gl_surface.swap_buffers(&self.gl_context).unwrap();
+				}
+				_ => ()
+			}
+		})
 	}
 
-	fn select_gl_config(configs: Box<dyn Iterator<Item = Config>>) -> Config {
+	fn create_window(title: &str, event_loop: &EventLoop<()>) -> (winit::window::Window, Config) {
+		let window_builder = WindowBuilder::new().with_title(title);
+		let template = ConfigTemplateBuilder::default();
+		let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
+		let (mut window_opt, gl_config) = display_builder
+			.build(event_loop, template, Self::select_gl_config)
+			.expect("Failed to create window");
+
+		let window = window_opt.take().expect("Window was None");
+		(window, gl_config)
+	}
+
+	fn create_surface(
+		window: &winit::window::Window,
+		gl_display: &Display,
+		gl_config: &Config
+	) -> Surface<WindowSurface> {
+		let surface_attributes =
+			window.build_surface_attributes(SurfaceAttributesBuilder::default());
+		unsafe { gl_display.create_window_surface(gl_config, &surface_attributes) }
+			.expect("Failed to create window surface")
+	}
+
+	fn create_active_context(
+		window: &winit::window::Window,
+		gl_display: &Display,
+		gl_config: &Config,
+		gl_surface: &Surface<WindowSurface>
+	) -> PossiblyCurrentContext {
+		let raw_window_handle = window.raw_window_handle();
+		let context_attributes = ContextAttributesBuilder::new().build(Some(raw_window_handle));
+
+		let gl_inactive_context =
+			unsafe { gl_display.create_context(gl_config, &context_attributes) }
+				.expect("Failed to create context");
+
+		gl_inactive_context
+			.make_current(gl_surface)
+			.expect("Failed to activate OpenGL context")
+	}
+
+	fn gl(gl_display: &Display) -> glow::Context {
+		unsafe {
+			glow::Context::from_loader_function(|symbol| {
+				gl_display.get_proc_address(&CString::new(symbol).unwrap())
+			})
+		}
+	}
+
+	fn select_gl_config<'a>(configs: Box<dyn Iterator<Item = Config> + 'a>) -> Config {
 		configs
 			.reduce(|acc, config| {
 				if config.num_samples() > acc.num_samples() {
@@ -97,27 +143,5 @@ impl Window {
 				}
 			})
 			.expect("No suitable OpenGL config found")
-	}
-
-	fn activate(
-		window: Option<winit::window::Window>,
-		gl_inactive_context: NotCurrentContext,
-		gl_config: &Config
-	) -> WindowState {
-		let attrs = window.unwrap().build_surface_attributes(Default::default());
-
-		let gl_surface = unsafe {
-			gl_config
-				.display()
-				.create_window_surface(&gl_config, &attrs)
-		}
-		.expect("Failed to create surface");
-		let gl_context = gl_inactive_context
-			.make_current(&gl_surface)
-			.expect("Failed to active OpenGL context");
-		WindowState {
-			gl_surface,
-			gl_context
-		}
 	}
 }
