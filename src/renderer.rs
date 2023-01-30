@@ -33,6 +33,7 @@ impl window::Renderer for Renderer {
 			);
 
 			gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, size_of::<Vertex>() as i32, 0);
+			gl.enable_vertex_attrib_array(0);
 
 			let vertex_shader = gl
 				.create_shader(glow::VERTEX_SHADER)
