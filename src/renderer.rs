@@ -1,6 +1,6 @@
-use std::{mem::size_of, slice};
+use std::{mem::size_of, rc::Rc};
 
-use crevice::std430::{AsStd430, Vec2, Vec3};
+use crevice::std430::{self, AsStd430, Vec2, Vec3};
 use glow::HasContext;
 use winit::dpi::LogicalSize;
 
@@ -8,13 +8,14 @@ use crate::window;
 
 #[derive(AsStd430)]
 pub struct Dot {
-	coords: Vec2,
-	radius: f32,
-	color: Vec3,
-	brightness: f32
+	pub coords: Vec2,
+	pub radius: f32,
+	pub color: Vec3,
+	pub brightness: f32
 }
 
 pub struct Renderer {
+	gl: Option<Rc<glow::Context>>,
 	dots: Vec<Dot>
 }
 
@@ -32,14 +33,23 @@ const FRAGMENT_SHADER: &str = include_str!("./shaders/test.frag.glsl");
 
 const NUM_VERTICES: usize = 4;
 
-impl window::Renderer for Renderer {
-	fn init(&mut self, gl: &glow::Context) {
-		unsafe {
-			let vertex_array = gl
-				.create_vertex_array()
-				.expect("Failed to create vertex array");
-			gl.bind_vertex_array(Some(vertex_array));
+macro_rules! to_binary {
+	($slice:expr, $type:ty) => {
+		::std::slice::from_raw_parts(
+			(&$slice as *const _) as *const u8,
+			$slice.len() * ::std::mem::size_of::<$type>()
+		)
+	};
+}
 
+impl window::Renderer for Renderer {
+	fn init(&mut self, gl: Rc<glow::Context>) {
+		self.gl = Some(Rc::clone(&gl));
+		self.bind_vertex_array();
+
+		let vertex_buffer = Buffer::new();
+
+		unsafe {
 			let vertex_buffer = gl.create_buffer().expect("Failed to create vertex buffer");
 			gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
 
@@ -54,6 +64,20 @@ impl window::Renderer for Renderer {
 			);
 			gl.enable_vertex_attrib_array(0);
 			gl.enable_vertex_attrib_array(1);
+
+			let obj_buffer = gl.create_buffer().expect("Failed to create object buffer");
+			gl.bind_buffer(glow::SHADER_STORAGE_BUFFER, Some(obj_buffer));
+
+			let obj_buffer_data: Vec<u8> = vec![];
+			let mut writer = std430::Writer::new(obj_buffer_data);
+			writer.write(&(self.dots.len() as u32)).unwrap();
+			writer.write(self.dots.as_slice()).unwrap();
+
+			// gl.buffer_data_u8_slice(
+			// 	glow::SHADER_STORAGE_BUFFER,
+			// 	writer.,
+			// 	glow::STATIC_DRAW
+			// );
 
 			let vertex_shader = gl
 				.create_shader(glow::VERTEX_SHADER)
@@ -82,7 +106,8 @@ impl window::Renderer for Renderer {
 		}
 	}
 
-	fn draw(&mut self, gl: &glow::Context, LogicalSize { width, height }: LogicalSize<f32>) {
+	fn draw(&mut self, LogicalSize { width, height }: LogicalSize<f32>) {
+		let gl = self.gl.as_ref().unwrap();
 		unsafe {
 			gl.buffer_data_u8_slice(
 				glow::ARRAY_BUFFER,
@@ -97,17 +122,22 @@ impl window::Renderer for Renderer {
 
 impl Renderer {
 	pub fn new(dots: Vec<Dot>) -> Self {
-		Self { dots }
+		Self { dots, gl: None }
+	}
+
+	fn bind_vertex_array(&self) {
+		let gl = self.gl.as_ref().unwrap();
+		unsafe {
+			let vertex_array = gl
+				.create_vertex_array()
+				.expect("Failed to create vertex array");
+			gl.bind_vertex_array(Some(vertex_array));
+		}
 	}
 
 	fn vertex_data(width: f32, height: f32) -> [u8; size_of::<Vertex>() * NUM_VERTICES] {
 		let vertices = Self::generate_vertices(width, height);
-		let slice = unsafe {
-			slice::from_raw_parts(
-				(&vertices as *const Vertex) as *const u8,
-				vertices.len() * size_of::<Vertex>()
-			)
-		};
+		let slice = unsafe { to_binary!(vertices, Vertex) };
 		slice.try_into().unwrap()
 	}
 

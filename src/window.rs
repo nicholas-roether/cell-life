@@ -1,4 +1,4 @@
-use std::{ffi::CString, num::NonZeroU32};
+use std::{ffi::CString, num::NonZeroU32, rc::Rc};
 
 use glow::HasContext;
 use glutin::{
@@ -18,9 +18,9 @@ use winit::{
 };
 
 pub trait Renderer {
-	fn init(&mut self, gl: &glow::Context);
+	fn init(&mut self, gl: Rc<glow::Context>);
 
-	fn draw(&mut self, gl: &glow::Context, size: LogicalSize<f32>);
+	fn draw(&mut self, size: LogicalSize<f32>);
 }
 
 const MIN_WIDTH: u32 = 360;
@@ -30,7 +30,7 @@ pub struct Window {
 	window: winit::window::Window,
 	event_loop: Option<EventLoop<()>>,
 	size: LogicalSize<f32>,
-	gl: glow::Context,
+	gl: Rc<glow::Context>,
 	gl_surface: Surface<WindowSurface>,
 	gl_context: PossiblyCurrentContext,
 	renderer: Box<dyn Renderer>
@@ -46,7 +46,7 @@ impl Window {
 		let gl = Self::gl(&gl_display);
 		let size = Self::logical_size(&window, window.inner_size());
 
-		renderer.init(&gl);
+		renderer.init(Rc::clone(&gl));
 
 		Self {
 			window,
@@ -74,7 +74,7 @@ impl Window {
 						_ => ()
 					},
 					Event::RedrawRequested(_) => {
-						self.renderer.draw(&self.gl, self.size);
+						self.renderer.draw(self.size);
 					}
 					Event::RedrawEventsCleared => {
 						self.window.request_redraw();
@@ -128,12 +128,12 @@ impl Window {
 			.expect("Failed to activate OpenGL context")
 	}
 
-	fn gl(gl_display: &Display) -> glow::Context {
-		unsafe {
+	fn gl(gl_display: &Display) -> Rc<glow::Context> {
+		Rc::new(unsafe {
 			glow::Context::from_loader_function(|symbol| {
 				gl_display.get_proc_address(&CString::new(symbol).unwrap())
 			})
-		}
+		})
 	}
 
 	fn select_gl_config<'a>(configs: Box<dyn Iterator<Item = Config> + 'a>) -> Config {

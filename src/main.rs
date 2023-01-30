@@ -1,6 +1,6 @@
 use app::App;
 mod app;
-mod renderer;
+mod render;
 mod window;
 
 fn main() {

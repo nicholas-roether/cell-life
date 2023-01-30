@@ -1,7 +1,7 @@
-use crevice::std430::Vec2;
+use crevice::std430::{Vec2, Vec3};
 
 use crate::{
-	renderer::{Dot, Renderer},
+	render::{Dot, Renderer},
 	window::Window
 };
 
@@ -14,9 +14,13 @@ const APP_NAME: &str = "Cell Life";
 impl App {
 	pub fn new() -> Self {
 		let renderer = Renderer::new(vec![Dot {
-			coords: Vec2::,
+			coords: Vec2 { x: 0.0, y: 0.0 },
 			radius: 5.0,
-			color: [1.0, 0.0, 0.0],
+			color: Vec3 {
+				x: 1.0,
+				y: 0.0,
+				z: 0.0
+			},
 			brightness: 0.5
 		}]);
 		let window = Window::new(APP_NAME, Box::new(renderer));
