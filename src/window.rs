@@ -1,5 +1,6 @@
 use std::{ffi::CString, num::NonZeroU32};
 
+use glow::HasContext;
 use glutin::{
 	config::{Config, ConfigTemplateBuilder},
 	context::{ContextAttributesBuilder, PossiblyCurrentContext},
@@ -10,6 +11,7 @@ use glutin::{
 use glutin_winit::{DisplayBuilder, GlWindow};
 use raw_window_handle::HasRawWindowHandle;
 use winit::{
+	dpi::LogicalSize,
 	event::{Event, WindowEvent},
 	event_loop::EventLoop,
 	window::WindowBuilder
@@ -21,9 +23,12 @@ pub trait Renderer {
 	fn draw(&mut self, gl: &glow::Context);
 }
 
+const MIN_WIDTH: u32 = 360;
+const MIN_HEIGHT: u32 = 240;
+
 pub struct Window {
 	window: winit::window::Window,
-	event_loop: EventLoop<()>,
+	event_loop: Option<EventLoop<()>>,
 	gl: glow::Context,
 	gl_surface: Surface<WindowSurface>,
 	gl_context: PossiblyCurrentContext,
@@ -44,7 +49,7 @@ impl Window {
 		Self {
 			window,
 			renderer,
-			event_loop,
+			event_loop: Some(event_loop),
 			gl,
 			gl_surface,
 			gl_context
@@ -52,40 +57,35 @@ impl Window {
 	}
 
 	pub fn run(mut self) {
-		let event_loop = self.event_loop;
-		event_loop.run(move |window_event, _window_target, control_flow| {
-			control_flow.set_wait();
-			match window_event {
-				Event::WindowEvent { event, .. } => match event {
-					WindowEvent::Resized(size) => {
-						if size.width == 0 || size.height == 0 {
-							return;
+		self.event_loop
+			.take()
+			.expect("Window is already running")
+			.run(move |window_event, _window_target, control_flow| {
+				control_flow.set_wait();
+				match window_event {
+					Event::WindowEvent { event, .. } => match event {
+						WindowEvent::Resized(size) => self.resize(size.width, size.height),
+						WindowEvent::CloseRequested => {
+							control_flow.set_exit();
 						}
-						self.gl_surface.resize(
-							&self.gl_context,
-							NonZeroU32::new(size.width).unwrap(),
-							NonZeroU32::new(size.height).unwrap()
-						);
+						_ => ()
+					},
+					Event::RedrawRequested(_) => {
+						self.renderer.draw(&self.gl);
 					}
-					WindowEvent::CloseRequested => {
-						control_flow.set_exit();
+					Event::RedrawEventsCleared => {
+						self.window.request_redraw();
+						self.gl_surface.swap_buffers(&self.gl_context).unwrap();
 					}
 					_ => ()
-				},
-				Event::RedrawRequested(_) => {
-					self.renderer.draw(&self.gl);
 				}
-				Event::RedrawEventsCleared => {
-					self.window.request_redraw();
-					self.gl_surface.swap_buffers(&self.gl_context).unwrap();
-				}
-				_ => ()
-			}
-		})
+			})
 	}
 
 	fn create_window(title: &str, event_loop: &EventLoop<()>) -> (winit::window::Window, Config) {
-		let window_builder = WindowBuilder::new().with_title(title);
+		let window_builder = WindowBuilder::new()
+			.with_title(title)
+			.with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
 		let template = ConfigTemplateBuilder::default();
 		let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
 		let (mut window_opt, gl_config) = display_builder
@@ -143,5 +143,17 @@ impl Window {
 				}
 			})
 			.expect("No suitable OpenGL config found")
+	}
+
+	fn resize(&self, width: u32, height: u32) {
+		if width == 0 || height == 0 {
+			return;
+		}
+		self.gl_surface.resize(
+			&self.gl_context,
+			NonZeroU32::new(width).unwrap(),
+			NonZeroU32::new(height).unwrap()
+		);
+		unsafe { self.gl.viewport(0, 0, width as i32, height as i32) };
 	}
 }
