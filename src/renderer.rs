@@ -8,6 +8,7 @@ use crate::window;
 pub struct Renderer;
 
 #[allow(unused)]
+#[derive(Debug)]
 struct Vertex {
 	u: f32,
 	v: f32,
@@ -41,6 +42,7 @@ impl window::Renderer for Renderer {
 				2 * size_of::<f32>() as i32
 			);
 			gl.enable_vertex_attrib_array(0);
+			gl.enable_vertex_attrib_array(1);
 
 			let vertex_shader = gl
 				.create_shader(glow::VERTEX_SHADER)
