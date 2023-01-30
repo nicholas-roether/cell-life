@@ -11,7 +11,7 @@ use glutin::{
 use glutin_winit::{DisplayBuilder, GlWindow};
 use raw_window_handle::HasRawWindowHandle;
 use winit::{
-	dpi::LogicalSize,
+	dpi::{LogicalSize, PhysicalSize},
 	event::{Event, WindowEvent},
 	event_loop::EventLoop,
 	window::WindowBuilder
@@ -20,7 +20,7 @@ use winit::{
 pub trait Renderer {
 	fn init(&mut self, gl: &glow::Context);
 
-	fn draw(&mut self, gl: &glow::Context);
+	fn draw(&mut self, gl: &glow::Context, size: LogicalSize<f32>);
 }
 
 const MIN_WIDTH: u32 = 360;
@@ -29,6 +29,7 @@ const MIN_HEIGHT: u32 = 240;
 pub struct Window {
 	window: winit::window::Window,
 	event_loop: Option<EventLoop<()>>,
+	size: LogicalSize<f32>,
 	gl: glow::Context,
 	gl_surface: Surface<WindowSurface>,
 	gl_context: PossiblyCurrentContext,
@@ -43,11 +44,13 @@ impl Window {
 		let gl_surface = Self::create_surface(&window, &gl_display, &gl_config);
 		let gl_context = Self::create_active_context(&window, &gl_display, &gl_config, &gl_surface);
 		let gl = Self::gl(&gl_display);
+		let size = Self::logical_size(&window, window.inner_size());
 
 		renderer.init(&gl);
 
 		Self {
 			window,
+			size,
 			renderer,
 			event_loop: Some(event_loop),
 			gl,
@@ -64,14 +67,14 @@ impl Window {
 				control_flow.set_wait();
 				match window_event {
 					Event::WindowEvent { event, .. } => match event {
-						WindowEvent::Resized(size) => self.resize(size.width, size.height),
+						WindowEvent::Resized(size) => self.resize(size),
 						WindowEvent::CloseRequested => {
 							control_flow.set_exit();
 						}
 						_ => ()
 					},
 					Event::RedrawRequested(_) => {
-						self.renderer.draw(&self.gl);
+						self.renderer.draw(&self.gl, self.size);
 					}
 					Event::RedrawEventsCleared => {
 						self.window.request_redraw();
@@ -145,15 +148,29 @@ impl Window {
 			.expect("No suitable OpenGL config found")
 	}
 
-	fn resize(&self, width: u32, height: u32) {
-		if width == 0 || height == 0 {
+	fn logical_size(
+		window: &winit::window::Window,
+		physical_size: PhysicalSize<u32>
+	) -> LogicalSize<f32> {
+		LogicalSize {
+			width: (physical_size.width as f64 / window.scale_factor()) as f32,
+			height: (physical_size.height as f64 / window.scale_factor()) as f32
+		}
+	}
+
+	fn resize(&mut self, physical_size: PhysicalSize<u32>) {
+		if physical_size.width == 0 || physical_size.height == 0 {
 			return;
 		}
+		self.size = Self::logical_size(&self.window, physical_size);
 		self.gl_surface.resize(
 			&self.gl_context,
-			NonZeroU32::new(width).unwrap(),
-			NonZeroU32::new(height).unwrap()
+			NonZeroU32::new(self.size.width as u32).unwrap(),
+			NonZeroU32::new(self.size.height as u32).unwrap()
 		);
-		unsafe { self.gl.viewport(0, 0, width as i32, height as i32) };
+		unsafe {
+			self.gl
+				.viewport(0, 0, self.size.width as i32, self.size.height as i32)
+		};
 	}
 }

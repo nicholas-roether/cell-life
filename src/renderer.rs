@@ -1,17 +1,24 @@
 use std::{mem::size_of, slice};
 
 use glow::HasContext;
+use winit::dpi::LogicalSize;
 
 use crate::window;
 
 pub struct Renderer;
 
-type Vertex = [f32; 3];
-
-const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
+#[allow(unused)]
+struct Vertex {
+	u: f32,
+	v: f32,
+	x: f32,
+	y: f32
+}
 
 const VERTEX_SHADER: &str = include_str!("./shaders/test.vert.glsl");
 const FRAGMENT_SHADER: &str = include_str!("./shaders/test.frag.glsl");
+
+const NUM_VERTICES: usize = 4;
 
 impl window::Renderer for Renderer {
 	fn init(&mut self, gl: &glow::Context) {
@@ -23,16 +30,16 @@ impl window::Renderer for Renderer {
 
 			let vertex_buffer = gl.create_buffer().expect("Failed to create vertex buffer");
 			gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
-			gl.buffer_data_u8_slice(
-				glow::ARRAY_BUFFER,
-				slice::from_raw_parts(
-					(&VERTICES as *const Vertex) as *const u8,
-					VERTICES.len() * size_of::<Vertex>()
-				),
-				glow::STATIC_DRAW
-			);
 
-			gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, size_of::<Vertex>() as i32, 0);
+			gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, size_of::<Vertex>() as i32, 0);
+			gl.vertex_attrib_pointer_f32(
+				1,
+				2,
+				glow::FLOAT,
+				false,
+				size_of::<Vertex>() as i32,
+				2 * size_of::<f32>() as i32
+			);
 			gl.enable_vertex_attrib_array(0);
 
 			let vertex_shader = gl
@@ -62,10 +69,15 @@ impl window::Renderer for Renderer {
 		}
 	}
 
-	fn draw(&mut self, gl: &glow::Context) {
+	fn draw(&mut self, gl: &glow::Context, LogicalSize { width, height }: LogicalSize<f32>) {
 		unsafe {
+			gl.buffer_data_u8_slice(
+				glow::ARRAY_BUFFER,
+				&Self::vertex_data(width, height),
+				glow::STATIC_DRAW
+			);
 			gl.clear(glow::COLOR_BUFFER_BIT);
-			gl.draw_arrays(glow::TRIANGLES, 0, 3);
+			gl.draw_arrays(glow::TRIANGLE_STRIP, 0, NUM_VERTICES as i32);
 		}
 	}
 }
@@ -73,5 +85,45 @@ impl window::Renderer for Renderer {
 impl Renderer {
 	pub fn new() -> Self {
 		Self {}
+	}
+
+	fn vertex_data(width: f32, height: f32) -> [u8; size_of::<Vertex>() * NUM_VERTICES] {
+		let vertices = Self::generate_vertices(width, height);
+		let slice = unsafe {
+			slice::from_raw_parts(
+				(&vertices as *const Vertex) as *const u8,
+				vertices.len() * size_of::<Vertex>()
+			)
+		};
+		slice.try_into().unwrap()
+	}
+
+	fn generate_vertices(width: f32, height: f32) -> [Vertex; NUM_VERTICES] {
+		[
+			Vertex {
+				u: -1.0,
+				v: -1.0,
+				x: -width / 2.0,
+				y: -height / 2.0
+			},
+			Vertex {
+				u: -1.0,
+				v: 1.0,
+				x: -width / 2.0,
+				y: height / 2.0
+			},
+			Vertex {
+				u: 1.0,
+				v: -1.0,
+				x: width / 2.0,
+				y: -height / 2.0
+			},
+			Vertex {
+				u: 1.0,
+				v: 1.0,
+				x: width / 2.0,
+				y: height / 2.0
+			}
+		]
 	}
 }
