@@ -1,11 +1,22 @@
 use std::{mem::size_of, slice};
 
+use crevice::std430::{AsStd430, Vec2, Vec3};
 use glow::HasContext;
 use winit::dpi::LogicalSize;
 
 use crate::window;
 
-pub struct Renderer;
+#[derive(AsStd430)]
+pub struct Dot {
+	coords: Vec2,
+	radius: f32,
+	color: Vec3,
+	brightness: f32
+}
+
+pub struct Renderer {
+	dots: Vec<Dot>
+}
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -85,8 +96,8 @@ impl window::Renderer for Renderer {
 }
 
 impl Renderer {
-	pub fn new() -> Self {
-		Self {}
+	pub fn new(dots: Vec<Dot>) -> Self {
+		Self { dots }
 	}
 
 	fn vertex_data(width: f32, height: f32) -> [u8; size_of::<Vertex>() * NUM_VERTICES] {
