@@ -1,6 +1,6 @@
 use std::{mem::size_of, rc::Rc};
 
-use glow::HasContext;
+use glow::{HasContext, VertexArray};
 
 #[derive(Debug)]
 struct VertexAttribute {
@@ -58,16 +58,28 @@ impl VertexAttribute {
 #[derive(Debug)]
 pub struct VertexModel {
 	gl: Rc<glow::Context>,
+	vertex_array: VertexArray,
 	vertex_size: usize,
 	attributes: Vec<VertexAttribute>
 }
 
 impl VertexModel {
 	pub fn new(gl: Rc<glow::Context>) -> Self {
+		let vertex_array = unsafe {
+			gl.create_vertex_array()
+				.expect("Failed to create vertex array")
+		};
 		Self {
 			gl: Rc::clone(&gl),
+			vertex_array,
 			vertex_size: 0,
 			attributes: Vec::new()
+		}
+	}
+
+	pub fn bind(&self) {
+		unsafe {
+			self.gl.bind_vertex_array(Some(self.vertex_array));
 		}
 	}
 
@@ -78,11 +90,18 @@ impl VertexModel {
 	}
 
 	pub fn apply(&self) {
+		self.bind();
 		let mut offset = 0;
 		for (i, attr) in self.attributes.iter().enumerate() {
 			attr.register(&self.gl, i, self.vertex_size, offset);
 			unsafe { self.gl.enable_vertex_attrib_array(i as u32) }
 			offset += attr.size as usize * attr.type_size;
 		}
+	}
+}
+
+impl Drop for VertexModel {
+	fn drop(&mut self) {
+		unsafe { self.gl.delete_vertex_array(self.vertex_array) }
 	}
 }

@@ -26,23 +26,17 @@ const RESIZE_FACTOR: usize = 2;
 impl Buffer {
 	pub fn new(gl: Rc<glow::Context>, target: u32) -> Self {
 		let native_buffer = unsafe { gl.create_buffer() }.expect("Failed to create buffer");
-		let buffer = Self {
+		Self {
 			gl,
 			length: 0,
 			capacity: 0,
 			target,
 			native_buffer
-		};
-		buffer.bind();
-		buffer
+		}
 	}
 
 	pub fn len(&self) -> usize {
 		self.length
-	}
-
-	pub fn bind(&self) {
-		unsafe { self.gl.bind_buffer(self.target, Some(self.native_buffer)) }
 	}
 
 	pub fn bind_base(&self, index: u32) {
@@ -54,6 +48,7 @@ impl Buffer {
 
 	pub fn set_data<T>(&mut self, data: &[T], usage: u32) {
 		let bin_data = unsafe { to_binary!(data, T) };
+		self.bind();
 		unsafe { self.gl.buffer_data_u8_slice(self.target, bin_data, usage) }
 		self.length = data.len();
 		self.capacity = data.len();
@@ -70,12 +65,17 @@ impl Buffer {
 		} else if new_length > INITIAL_SIZE && new_length < self.capacity / RESIZE_FACTOR {
 			self.shrink(usage);
 		}
+		self.bind();
 		unsafe {
 			self.gl
 				.buffer_sub_data_u8_slice(self.target, self.len() as i32, data);
 		};
 		self.length = new_length;
 		self.len()
+	}
+
+	pub fn bind(&self) {
+		unsafe { self.gl.bind_buffer(self.target, Some(self.native_buffer)) }
 	}
 
 	fn resize(&mut self, new_capacity: usize, usage: u32) {
@@ -102,7 +102,6 @@ impl Buffer {
 			self.native_buffer = new_buffer;
 			self.capacity = new_capacity;
 		}
-		self.bind();
 	}
 
 	fn grow(&mut self, usage: u32) {

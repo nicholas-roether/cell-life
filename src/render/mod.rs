@@ -3,4 +3,6 @@ mod renderer;
 mod shader;
 mod vertex_model;
 
-pub use renderer::{Dot, Renderer};
+pub mod layers;
+
+pub use renderer::Renderer;
