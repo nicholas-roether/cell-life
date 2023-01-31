@@ -65,6 +65,7 @@ impl window::Renderer for Renderer {
 
 impl Renderer {
 	pub fn new(gl: Rc<glow::Context>, dots: Vec<Dot>) -> Self {
+		Self::init(&gl);
 		Self::bind_vertex_array(&gl);
 
 		let vertex_buffer = Buffer::new(Rc::clone(&gl), glow::ARRAY_BUFFER);
@@ -93,6 +94,13 @@ impl Renderer {
 			vertex_buffer,
 			_obj_buffer: obj_buffer,
 			_shader_program: shader_program
+		}
+	}
+
+	fn init(gl: &glow::Context) {
+		unsafe {
+			gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+			gl.enable(glow::BLEND);
 		}
 	}
 
