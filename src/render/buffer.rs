@@ -58,7 +58,7 @@ impl Buffer {
 		BufferWriter::new(self, usage)
 	}
 
-	pub fn write(&mut self, data: &[u8], usage: u32) -> usize {
+	pub fn write(&mut self, data: &[u8], offset: usize, usage: u32) -> usize {
 		let new_length = self.len() + data.len();
 		if new_length > self.capacity {
 			self.grow(usage);
@@ -68,7 +68,7 @@ impl Buffer {
 		self.bind();
 		unsafe {
 			self.gl
-				.buffer_sub_data_u8_slice(self.target, self.len() as i32, data);
+				.buffer_sub_data_u8_slice(self.target, offset as i32, data);
 		};
 		self.length = new_length;
 		self.len()
@@ -131,18 +131,24 @@ impl Drop for Buffer {
 
 pub struct BufferWriter<'a> {
 	buffer: &'a mut Buffer,
+	length: usize,
 	usage: u32
 }
 
 impl<'a> BufferWriter<'a> {
 	fn new(buffer: &'a mut Buffer, usage: u32) -> Self {
-		Self { buffer, usage }
+		Self {
+			buffer,
+			length: 0,
+			usage
+		}
 	}
 }
 
 impl<'a> Write for BufferWriter<'a> {
 	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-		self.buffer.write(buf, self.usage);
+		self.buffer.write(buf, self.length, self.usage);
+		self.length += buf.len();
 		Ok(buf.len())
 	}
 	fn flush(&mut self) -> std::io::Result<()> {

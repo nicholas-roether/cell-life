@@ -67,7 +67,7 @@ impl Window {
 	}
 
 	fn handle_event(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
-		control_flow.set_wait();
+		control_flow.set_poll();
 		match event {
 			Event::WindowEvent { event, .. } => self.handle_window_event(event, control_flow),
 			Event::RedrawRequested(_) => {

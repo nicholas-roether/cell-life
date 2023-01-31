@@ -1,7 +1,7 @@
 use app::App;
 mod app;
-mod model;
 mod render;
+mod simulation;
 mod window;
 
 fn main() {
