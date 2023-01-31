@@ -6,7 +6,11 @@ use winit::dpi::LogicalSize;
 
 use crate::window;
 
-use super::{array_buffer::ArrayBuffer, buffer::Buffer};
+use super::{
+	buffer::Buffer,
+	shader::{Shader, ShaderProgram},
+	vertex_model::VertexModel
+};
 
 #[derive(AsStd430)]
 pub struct Dot {
@@ -17,8 +21,10 @@ pub struct Dot {
 }
 
 pub struct Renderer {
-	gl: Option<Rc<glow::Context>>,
-	dots: Vec<Dot>
+	gl: Rc<glow::Context>,
+	vertex_buffer: Buffer,
+	_obj_buffer: Buffer,
+	_shader_program: ShaderProgram
 }
 
 #[allow(unused)]
@@ -45,70 +51,52 @@ macro_rules! to_binary {
 }
 
 impl window::Renderer for Renderer {
-	fn init(&mut self, gl: Rc<glow::Context>) {
-		self.gl = Some(Rc::clone(&gl));
-		self.bind_vertex_array();
-
-		let mut vertex_buffer = ArrayBuffer::new(Rc::clone(&gl));
-		vertex_buffer.add_attribute(2, glow::FLOAT);
-		vertex_buffer.add_attribute(2, glow::FLOAT);
-		vertex_buffer.bind();
-
-		let obj_buffer = Buffer::new(Rc::clone(&gl), glow::SHADER_STORAGE_BUFFER);
-		let mut writer = std430::Writer::new(obj_buffer.make_writer(glow::STATIC_DRAW));
-		writer.write(&(self.dots.len() as u32)).unwrap();
-		writer.write(self.dots.as_slice()).unwrap();
-		obj_buffer.bind();
-
-		unsafe {
-			let vertex_shader = gl
-				.create_shader(glow::VERTEX_SHADER)
-				.expect("Failed to create vertex shader");
-			gl.shader_source(vertex_shader, VERTEX_SHADER);
-			gl.compile_shader(vertex_shader);
-			assert!(gl.get_shader_compile_status(vertex_shader));
-
-			let fragment_shader = gl
-				.create_shader(glow::FRAGMENT_SHADER)
-				.expect("Failed to create fragment shader");
-			gl.shader_source(fragment_shader, FRAGMENT_SHADER);
-			gl.compile_shader(fragment_shader);
-			assert!(gl.get_shader_compile_status(fragment_shader));
-
-			let shader_program = gl
-				.create_program()
-				.expect("Failed to create shader program");
-			gl.attach_shader(shader_program, vertex_shader);
-			gl.attach_shader(shader_program, fragment_shader);
-			gl.link_program(shader_program);
-			assert!(gl.get_program_link_status(shader_program));
-			gl.delete_shader(vertex_shader);
-			gl.delete_shader(fragment_shader);
-			gl.use_program(Some(shader_program));
-		}
-	}
-
 	fn draw(&mut self, LogicalSize { width, height }: LogicalSize<f32>) {
-		let gl = self.gl.as_ref().unwrap();
+		self.vertex_buffer
+			.set_data(&Self::vertex_data(width, height), glow::STREAM_DRAW);
+
 		unsafe {
-			gl.buffer_data_u8_slice(
-				glow::ARRAY_BUFFER,
-				&Self::vertex_data(width, height),
-				glow::STATIC_DRAW
-			);
-			gl.clear(glow::COLOR_BUFFER_BIT);
-			gl.draw_arrays(glow::TRIANGLE_STRIP, 0, NUM_VERTICES as i32);
+			self.gl.clear(glow::COLOR_BUFFER_BIT);
+			self.gl
+				.draw_arrays(glow::TRIANGLE_STRIP, 0, NUM_VERTICES as i32);
 		}
 	}
 }
 
 impl Renderer {
-	pub fn new(dots: Vec<Dot>) -> Self {
-		Self { dots, gl: None }
+	pub fn new(gl: Rc<glow::Context>, dots: Vec<Dot>) -> Self {
+		Self::bind_vertex_array(&gl);
+
+		let vertex_buffer = Buffer::new(Rc::clone(&gl), glow::ARRAY_BUFFER);
+
+		let mut vertex_model = VertexModel::new(Rc::clone(&gl));
+		vertex_model.add_attribute(2, glow::FLOAT);
+		vertex_model.add_attribute(2, glow::FLOAT);
+		vertex_model.apply();
+
+		let mut obj_buffer = Buffer::new(Rc::clone(&gl), glow::SHADER_STORAGE_BUFFER);
+
+		let mut writer = std430::Writer::new(obj_buffer.make_writer(glow::STATIC_DRAW));
+		writer.write(&(dots.len() as u32)).unwrap();
+		writer.write(dots.as_slice()).unwrap();
+
+		let vertex_shader = Shader::new(Rc::clone(&gl), glow::VERTEX_SHADER, VERTEX_SHADER);
+		let fragment_shader = Shader::new(Rc::clone(&gl), glow::FRAGMENT_SHADER, FRAGMENT_SHADER);
+		let shader_program =
+			ShaderProgram::new(Rc::clone(&gl), vec![vertex_shader, fragment_shader]);
+		shader_program.activate();
+
+		obj_buffer.bind_base(0);
+
+		Self {
+			gl,
+			vertex_buffer,
+			_obj_buffer: obj_buffer,
+			_shader_program: shader_program
+		}
 	}
 
-	fn bind_vertex_array(&self) {
-		let gl = self.gl.as_ref().unwrap();
+	fn bind_vertex_array(gl: &glow::Context) {
 		unsafe {
 			let vertex_array = gl
 				.create_vertex_array()

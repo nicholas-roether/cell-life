@@ -1,4 +1,4 @@
-use std::{ffi::CString, num::NonZeroU32, rc::Rc};
+use std::{ffi::CString, mem, num::NonZeroU32, rc::Rc};
 
 use glow::HasContext;
 use glutin::{
@@ -13,13 +13,11 @@ use raw_window_handle::HasRawWindowHandle;
 use winit::{
 	dpi::{LogicalSize, PhysicalSize},
 	event::{Event, WindowEvent},
-	event_loop::EventLoop,
+	event_loop::{ControlFlow, EventLoop},
 	window::WindowBuilder
 };
 
 pub trait Renderer {
-	fn init(&mut self, gl: Rc<glow::Context>);
-
 	fn draw(&mut self, size: LogicalSize<f32>);
 }
 
@@ -33,11 +31,14 @@ pub struct Window {
 	gl: Rc<glow::Context>,
 	gl_surface: Surface<WindowSurface>,
 	gl_context: PossiblyCurrentContext,
-	renderer: Box<dyn Renderer>
+	renderer: Option<Box<dyn Renderer>>
 }
 
 impl Window {
-	pub fn new(title: &str, mut renderer: Box<dyn Renderer>) -> Self {
+	pub fn new<R: Renderer + 'static, RB: FnOnce(Rc<glow::Context>) -> R>(
+		title: &str,
+		renderer_builder: RB
+	) -> Self {
 		let event_loop = EventLoop::new();
 		let (window, gl_config) = Self::create_window(title, &event_loop);
 		let gl_display = gl_config.display();
@@ -45,13 +46,12 @@ impl Window {
 		let gl_context = Self::create_active_context(&window, &gl_display, &gl_config, &gl_surface);
 		let gl = Self::gl(&gl_display);
 		let size = Self::logical_size(&window, window.inner_size());
-
-		renderer.init(Rc::clone(&gl));
+		let renderer = Box::new(renderer_builder(Rc::clone(&gl)));
 
 		Self {
 			window,
 			size,
-			renderer,
+			renderer: Some(renderer),
 			event_loop: Some(event_loop),
 			gl,
 			gl_surface,
@@ -63,26 +63,37 @@ impl Window {
 		self.event_loop
 			.take()
 			.expect("Window is already running")
-			.run(move |window_event, _window_target, control_flow| {
-				control_flow.set_wait();
-				match window_event {
-					Event::WindowEvent { event, .. } => match event {
-						WindowEvent::Resized(size) => self.resize(size),
-						WindowEvent::CloseRequested => {
-							control_flow.set_exit();
-						}
-						_ => ()
-					},
-					Event::RedrawRequested(_) => {
-						self.renderer.draw(self.size);
-					}
-					Event::RedrawEventsCleared => {
-						self.window.request_redraw();
-						self.gl_surface.swap_buffers(&self.gl_context).unwrap();
-					}
-					_ => ()
+			.run(move |event, _window_target, control_flow| self.handle_event(event, control_flow));
+	}
+
+	fn handle_event(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
+		control_flow.set_wait();
+		match event {
+			Event::WindowEvent { event, .. } => self.handle_window_event(event, control_flow),
+			Event::RedrawRequested(_) => {
+				if let Some(renderer) = &mut self.renderer {
+					renderer.draw(self.size);
 				}
-			})
+			}
+			Event::RedrawEventsCleared => {
+				self.window.request_redraw();
+				self.gl_surface.swap_buffers(&self.gl_context).unwrap();
+			}
+			_ => ()
+		}
+	}
+
+	fn handle_window_event(&mut self, event: WindowEvent, control_flow: &mut ControlFlow) {
+		match event {
+			WindowEvent::Resized(size) => self.resize(size),
+			WindowEvent::CloseRequested => {
+				control_flow.set_exit();
+				if let Some(renderer) = self.renderer.take() {
+					mem::drop(renderer); // Ensure the renderer is dropped before the OpenGL context is destroyed
+				}
+			}
+			_ => ()
+		}
 	}
 
 	fn create_window(title: &str, event_loop: &EventLoop<()>) -> (winit::window::Window, Config) {

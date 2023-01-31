@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 crevice = "0.12.0"
-glow = "0.12.0"
+glow = { version = "0.12.0", features = ["debug_automatic_glGetError"] }
 glutin = "0.30.3"
 glutin-winit = "0.2.2"
 raw-window-handle = "0.5.0"

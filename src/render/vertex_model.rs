@@ -2,8 +2,6 @@ use std::{mem::size_of, rc::Rc};
 
 use glow::HasContext;
 
-use super::buffer::Buffer;
-
 #[derive(Debug)]
 struct VertexAttribute {
 	size: u32,
@@ -58,18 +56,16 @@ impl VertexAttribute {
 }
 
 #[derive(Debug)]
-pub struct ArrayBuffer {
+pub struct VertexModel {
 	gl: Rc<glow::Context>,
-	buffer: Buffer,
 	vertex_size: usize,
 	attributes: Vec<VertexAttribute>
 }
 
-impl ArrayBuffer {
+impl VertexModel {
 	pub fn new(gl: Rc<glow::Context>) -> Self {
 		Self {
 			gl: Rc::clone(&gl),
-			buffer: Buffer::new(gl, glow::ARRAY_BUFFER),
 			vertex_size: 0,
 			attributes: Vec::new()
 		}
@@ -81,8 +77,7 @@ impl ArrayBuffer {
 		self.attributes.push(attr);
 	}
 
-	pub fn bind(&self) {
-		self.buffer.bind();
+	pub fn apply(&self) {
 		let mut offset = 0;
 		for (i, attr) in self.attributes.iter().enumerate() {
 			attr.register(&self.gl, i, self.vertex_size, offset);
