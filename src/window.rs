@@ -14,7 +14,8 @@ use winit::{
 	dpi::{LogicalSize, PhysicalSize},
 	event::{Event, WindowEvent},
 	event_loop::{ControlFlow, EventLoop},
-	window::WindowBuilder
+	platform::unix::WindowBuilderExtUnix,
+	window::{Theme, WindowBuilder}
 };
 
 pub trait Renderer {
@@ -99,6 +100,8 @@ impl Window {
 	fn create_window(title: &str, event_loop: &EventLoop<()>) -> (winit::window::Window, Config) {
 		let window_builder = WindowBuilder::new()
 			.with_title(title)
+			.with_gtk_theme_variant(String::from("dark"))
+			.with_wayland_csd_theme(Theme::Dark)
 			.with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
 		let template = ConfigTemplateBuilder::default();
 		let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
