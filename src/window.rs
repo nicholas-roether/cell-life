@@ -14,9 +14,14 @@ use winit::{
 	dpi::{LogicalSize, PhysicalSize},
 	event::{Event, WindowEvent},
 	event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
-	platform::unix::WindowBuilderExtUnix,
 	window::{Theme, WindowBuilder}
 };
+
+#[cfg(unix)]
+use winit::platform::unix::WindowBuilderExtUnix;
+
+#[cfg(windows)]
+use winit::platform::windows::WindowBuilderExtWindows;
 
 pub trait Renderer {
 	fn draw(&mut self, size: LogicalSize<f32>);
@@ -105,11 +110,7 @@ impl Window {
 	}
 
 	fn create_window(title: &str, event_loop: &EventLoop<f64>) -> (winit::window::Window, Config) {
-		let window_builder = WindowBuilder::new()
-			.with_title(title)
-			.with_gtk_theme_variant(String::from("dark"))
-			.with_wayland_csd_theme(Theme::Dark)
-			.with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
+		let window_builder = Self::create_window_builder(title);
 		let template = ConfigTemplateBuilder::default();
 		let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
 		let (mut window_opt, gl_config) = display_builder
@@ -118,6 +119,26 @@ impl Window {
 
 		let window = window_opt.take().expect("Window was None");
 		(window, gl_config)
+	}
+
+	fn create_window_builder(title: &str) -> WindowBuilder {
+		let mut builder = WindowBuilder::new()
+			.with_title(title)
+			.with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
+
+		#[cfg(unix)]
+		{
+			builder = builder
+				.with_gtk_theme_variant(String::from("dark"))
+				.with_wayland_csd_theme(Theme::Dark);
+		}
+
+		#[cfg(windows)]
+		{
+			builder = builder.with_theme(Some(Theme::Dark));
+		}
+
+		builder
 	}
 
 	fn create_surface(
@@ -173,10 +194,7 @@ impl Window {
 		window: &winit::window::Window,
 		physical_size: PhysicalSize<u32>
 	) -> LogicalSize<f32> {
-		LogicalSize {
-			width: (physical_size.width as f64 / window.scale_factor()) as f32,
-			height: (physical_size.height as f64 / window.scale_factor()) as f32
-		}
+		physical_size.to_logical(window.scale_factor())
 	}
 
 	fn resize(&mut self, physical_size: PhysicalSize<u32>) {
