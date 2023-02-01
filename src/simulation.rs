@@ -1,40 +1,44 @@
-use crevice::std430::AsStd430;
 use glam::{Vec2, Vec3};
 
-use crate::render::layers::dots::DotProvider;
+use crate::render::{layers, ObjectProvider};
 
-#[derive(AsStd430)]
-pub struct Dot {
+pub trait Tick {
+	fn tick(&mut self, time: f32);
+}
+
+pub struct Cell {
 	pub coords: Vec2,
 	pub radius: f32,
 	pub color: Vec3,
 	pub brightness: f32
 }
 
-pub trait Tick {
-	fn tick(&mut self, time: f32);
-}
-
-pub struct Simulation {
-	pub dots: Vec<Dot>
-}
-
-impl Tick for Simulation {
-	fn tick(&mut self, time: f32) {
-		for dot in &mut self.dots {
-			dot.tick(time);
-		}
-	}
-}
-
-impl Tick for Dot {
+impl Tick for Cell {
 	fn tick(&mut self, _time: f32) {
 		todo!()
 	}
 }
 
-impl DotProvider for Simulation {
-	fn get_dots(&self) -> &'_ [Dot] {
-		&self.dots
+pub struct Simulation {
+	pub cells: Vec<Cell>
+}
+
+impl Tick for Simulation {
+	fn tick(&mut self, time: f32) {
+		for cell in &mut self.cells {
+			cell.tick(time);
+		}
+	}
+}
+
+impl ObjectProvider<layers::dots::Dot> for Simulation {
+	fn iter_objects(&self) -> Box<dyn Iterator<Item = layers::dots::Dot> + '_> {
+		let iter = self.cells.iter().map(|cell| layers::dots::Dot {
+			coords: cell.coords,
+			radius: cell.radius,
+			color: cell.color,
+			brightness: cell.brightness
+		});
+		Box::new(iter)
 	}
 }

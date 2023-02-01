@@ -1,19 +1,25 @@
 use std::rc::Rc;
 
-use crevice::std430;
-use glam::{vec2, Vec2};
+use crevice::std430::{self, AsStd430};
+use glam::{vec2, Vec2, Vec3};
 use glow::HasContext;
 use winit::dpi::LogicalSize;
 
-use crate::{
-	render::{
-		buffer::Buffer,
-		renderer::Layer,
-		shader::{Shader, ShaderProgram},
-		vertex_model::VertexModel
-	},
-	simulation::Dot
+use crate::render::{
+	buffer::Buffer,
+	renderer::Layer,
+	shader::{Shader, ShaderProgram},
+	vertex_model::VertexModel,
+	ObjectProvider
 };
+
+#[derive(AsStd430)]
+pub struct Dot {
+	pub coords: Vec2,
+	pub radius: f32,
+	pub color: Vec3,
+	pub brightness: f32
+}
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -22,17 +28,13 @@ struct Vertex {
 	xy: Vec2
 }
 
-pub trait DotProvider {
-	fn get_dots(&self) -> &'_ [Dot];
-}
-
 pub struct DotsLayer {
 	gl: Rc<glow::Context>,
 	vertex_model: VertexModel,
 	vertex_buffer: Buffer,
 	obj_buffer: Buffer,
 	shader_program: ShaderProgram,
-	dot_provider: Box<dyn DotProvider>
+	dot_provider: Box<dyn ObjectProvider<Dot>>
 }
 
 const VERTEX_SHADER: &str = include_str!("./shaders/dots.vert.glsl");
@@ -41,7 +43,7 @@ const FRAGMENT_SHADER: &str = include_str!("./shaders/dots.frag.glsl");
 const NUM_VERTICES: usize = 4;
 
 impl DotsLayer {
-	pub fn new<D: DotProvider + 'static>(gl: Rc<glow::Context>, dot_provider: D) -> Self {
+	pub fn new<D: ObjectProvider<Dot> + 'static>(gl: Rc<glow::Context>, dot_provider: D) -> Self {
 		let mut vertex_model = VertexModel::new(Rc::clone(&gl));
 		vertex_model.add_attribute(2, glow::FLOAT);
 		vertex_model.add_attribute(2, glow::FLOAT);
@@ -71,13 +73,13 @@ impl DotsLayer {
 	}
 
 	fn write_dots(&mut self) {
-		let dots = self.dot_provider.get_dots();
+		let dots: Vec<Dot> = self.dot_provider.iter_objects().collect();
 		let mut writer = std430::Writer::new(self.obj_buffer.make_writer(glow::STREAM_DRAW));
 		writer
 			.write(&(dots.len() as u32))
 			.expect("Failed to write to storage buffer");
 		writer
-			.write(dots)
+			.write(dots.as_slice())
 			.expect("Failed to write to storage buffer");
 	}
 
