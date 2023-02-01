@@ -13,7 +13,7 @@ use raw_window_handle::HasRawWindowHandle;
 use winit::{
 	dpi::{LogicalSize, PhysicalSize},
 	event::{Event, WindowEvent},
-	event_loop::{ControlFlow, EventLoop},
+	event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
 	platform::unix::WindowBuilderExtUnix,
 	window::{Theme, WindowBuilder}
 };
@@ -27,7 +27,7 @@ const MIN_HEIGHT: u32 = 240;
 
 pub struct Window {
 	window: winit::window::Window,
-	event_loop: Option<EventLoop<()>>,
+	event_loop: Option<EventLoop<f64>>,
 	size: LogicalSize<f32>,
 	gl: Rc<glow::Context>,
 	gl_surface: Surface<WindowSurface>,
@@ -40,7 +40,7 @@ impl Window {
 		title: &str,
 		renderer_builder: RB
 	) -> Self {
-		let event_loop = EventLoop::new();
+		let event_loop = EventLoopBuilder::<f64>::with_user_event().build();
 		let (window, gl_config) = Self::create_window(title, &event_loop);
 		let gl_display = gl_config.display();
 		let gl_surface = Self::create_surface(&window, &gl_display, &gl_config);
@@ -60,6 +60,13 @@ impl Window {
 		}
 	}
 
+	pub fn proxy(&self) -> EventLoopProxy<f64> {
+		self.event_loop
+			.as_ref()
+			.expect("Event loop was already destroyed!")
+			.create_proxy()
+	}
+
 	pub fn run(mut self) {
 		self.event_loop
 			.take()
@@ -67,19 +74,17 @@ impl Window {
 			.run(move |event, _window_target, control_flow| self.handle_event(event, control_flow));
 	}
 
-	fn handle_event(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
-		control_flow.set_poll();
+	fn handle_event(&mut self, event: Event<f64>, control_flow: &mut ControlFlow) {
+		control_flow.set_wait();
 		match event {
 			Event::WindowEvent { event, .. } => self.handle_window_event(event, control_flow),
 			Event::RedrawRequested(_) => {
 				if let Some(renderer) = &mut self.renderer {
 					renderer.draw(self.size);
+					self.gl_surface.swap_buffers(&self.gl_context).unwrap();
 				}
 			}
-			Event::RedrawEventsCleared => {
-				self.window.request_redraw();
-				self.gl_surface.swap_buffers(&self.gl_context).unwrap();
-			}
+			Event::UserEvent(_) => self.window.request_redraw(),
 			_ => ()
 		}
 	}
@@ -97,7 +102,7 @@ impl Window {
 		}
 	}
 
-	fn create_window(title: &str, event_loop: &EventLoop<()>) -> (winit::window::Window, Config) {
+	fn create_window(title: &str, event_loop: &EventLoop<f64>) -> (winit::window::Window, Config) {
 		let window_builder = WindowBuilder::new()
 			.with_title(title)
 			.with_gtk_theme_variant(String::from("dark"))

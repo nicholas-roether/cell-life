@@ -1,16 +1,30 @@
-use glam::{Vec2, Vec3};
+use glam::{vec2, vec3, Vec2, Vec3};
 
 use crate::render::{layers, ObjectProvider};
 
 pub trait Tick {
-	fn tick(&mut self, time: f32);
+	fn tick(&mut self, dt: f32);
 }
 
-pub struct Cell {
-	pub coords: Vec2,
-	pub radius: f32,
-	pub color: Vec3,
-	pub brightness: f32
+#[derive(Debug)]
+struct Cell {
+	coords: Vec2,
+	radius: f32,
+	color: Vec3,
+	brightness: f32,
+	time: f32
+}
+
+impl Cell {
+	fn new(coords: Vec2, radius: f32, color: Vec3, brightness: f32) -> Self {
+		Self {
+			coords,
+			radius,
+			color,
+			brightness,
+			time: 0.0
+		}
+	}
 }
 
 impl Tick for Cell {
@@ -19,14 +33,27 @@ impl Tick for Cell {
 	}
 }
 
+#[derive(Debug)]
 pub struct Simulation {
-	pub cells: Vec<Cell>
+	cells: Vec<Cell>
+}
+
+impl Simulation {
+	pub fn new() -> Self {
+		Self {
+			cells: vec![
+				Cell::new(vec2(-30.0, 0.0), 5.0, vec3(1.0, 0.0, 0.0), 10.0),
+				Cell::new(vec2(30.0, 0.0), 8.0, vec3(0.1, 1.0, 0.2), 0.0),
+				Cell::new(vec2(0.0, -40.0), 3.0, vec3(0.2, 0.3, 1.0), 20.0),
+			]
+		}
+	}
 }
 
 impl Tick for Simulation {
-	fn tick(&mut self, time: f32) {
+	fn tick(&mut self, dt: f32) {
 		for cell in &mut self.cells {
-			cell.tick(time);
+			cell.tick(dt);
 		}
 	}
 }
