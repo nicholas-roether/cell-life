@@ -12,7 +12,7 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::{
 	render::{layers::dots::DotsLayer, Renderer},
-	simulation::{Simulation, Tick},
+	sim::{Simulation, Tick},
 	window::Window
 };
 

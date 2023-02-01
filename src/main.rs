@@ -3,7 +3,7 @@
 use app::App;
 mod app;
 mod render;
-mod simulation;
+mod sim;
 mod window;
 
 fn main() {
