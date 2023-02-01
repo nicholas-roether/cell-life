@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+	rc::Rc,
+	sync::{Arc, RwLock}
+};
 
 use crevice::std430::{self, AsStd430};
 use glam::{vec2, Vec2, Vec3};
@@ -28,13 +31,13 @@ struct Vertex {
 	xy: Vec2
 }
 
-pub struct DotsLayer {
+pub struct DotsLayer<P: ObjectProvider<Dot>> {
 	gl: Rc<glow::Context>,
 	vertex_model: VertexModel,
 	vertex_buffer: Buffer,
 	obj_buffer: Buffer,
 	shader_program: ShaderProgram,
-	dot_provider: Box<dyn ObjectProvider<Dot>>
+	dot_provider: Arc<RwLock<P>>
 }
 
 const VERTEX_SHADER: &str = include_str!("./shaders/dots.vert.glsl");
@@ -42,8 +45,8 @@ const FRAGMENT_SHADER: &str = include_str!("./shaders/dots.frag.glsl");
 
 const NUM_VERTICES: usize = 4;
 
-impl DotsLayer {
-	pub fn new<D: ObjectProvider<Dot> + 'static>(gl: Rc<glow::Context>, dot_provider: D) -> Self {
+impl<P: ObjectProvider<Dot>> DotsLayer<P> {
+	pub fn new(gl: Rc<glow::Context>, dot_provider: Arc<RwLock<P>>) -> Self {
 		let mut vertex_model = VertexModel::new(Rc::clone(&gl));
 		vertex_model.add_attribute(2, glow::FLOAT);
 		vertex_model.add_attribute(2, glow::FLOAT);
@@ -64,7 +67,7 @@ impl DotsLayer {
 
 		Self {
 			gl,
-			dot_provider: Box::new(dot_provider),
+			dot_provider,
 			vertex_model,
 			vertex_buffer,
 			obj_buffer,
@@ -73,7 +76,14 @@ impl DotsLayer {
 	}
 
 	fn write_dots(&mut self) {
-		let dots: Vec<Dot> = self.dot_provider.iter_objects().collect();
+		let dots: Vec<Dot> = {
+			let dot_provider = self
+				.dot_provider
+				.read()
+				.expect("Failed to get read lock on dot provider");
+			dot_provider.iter_objects().collect()
+		};
+
 		let mut writer = std430::Writer::new(self.obj_buffer.make_writer(glow::STREAM_DRAW));
 		writer
 			.write(&(dots.len() as u32))
@@ -105,7 +115,7 @@ impl DotsLayer {
 	}
 }
 
-impl Layer for DotsLayer {
+impl<P: ObjectProvider<Dot>> Layer for DotsLayer<P> {
 	fn draw(&mut self, size: LogicalSize<f32>) {
 		self.vertex_model.bind();
 		self.vertex_buffer.bind();

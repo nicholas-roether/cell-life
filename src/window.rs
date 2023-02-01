@@ -78,14 +78,16 @@ impl Window {
 		control_flow.set_wait();
 		match event {
 			Event::WindowEvent { event, .. } => self.handle_window_event(event, control_flow),
-			Event::RedrawRequested(_) => {
-				if let Some(renderer) = &mut self.renderer {
-					renderer.draw(self.size);
-					self.gl_surface.swap_buffers(&self.gl_context).unwrap();
-				}
-			}
-			Event::UserEvent(_) => self.window.request_redraw(),
+			Event::RedrawRequested(_) => self.draw(),
+			Event::UserEvent(_) => self.draw(),
 			_ => ()
+		}
+	}
+
+	fn draw(&mut self) {
+		if let Some(renderer) = &mut self.renderer {
+			renderer.draw(self.size);
+			self.gl_surface.swap_buffers(&self.gl_context).unwrap();
 		}
 	}
 
@@ -187,6 +189,7 @@ impl Window {
 			NonZeroU32::new(self.size.width as u32).unwrap(),
 			NonZeroU32::new(self.size.height as u32).unwrap()
 		);
+		self.window.request_redraw();
 		unsafe {
 			self.gl
 				.viewport(0, 0, self.size.width as i32, self.size.height as i32)
