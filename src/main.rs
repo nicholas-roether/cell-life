@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 #![feature(duration_consts_float)]
 
 use app::App;
