@@ -35,12 +35,7 @@ impl Tick for Simulation {
 
 impl ObjectProvider<layers::dots::Dot> for Simulation {
 	fn iter_objects(&self) -> Box<dyn Iterator<Item = layers::dots::Dot> + '_> {
-		let iter = self.cells.iter().map(|cell| layers::dots::Dot {
-			coords: cell.coords,
-			radius: cell.radius,
-			color: cell.color,
-			brightness: cell.brightness
-		});
+		let iter = self.cells.iter().map(|cell| cell.into());
 		Box::new(iter)
 	}
 }
