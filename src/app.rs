@@ -138,6 +138,7 @@ struct TimingThread {
 }
 
 const TPS: f64 = 60.0;
+const FRAME_DURATION: Duration = Duration::from_secs_f64(1.0 / TPS);
 
 impl TimingThread {
 	fn new() -> Self {
@@ -151,11 +152,14 @@ impl TimingThread {
 	}
 
 	fn start(mut self) {
-		thread::spawn(move || loop {
-			let now = SystemTime::now();
-			thread::sleep(Duration::from_secs_f64(1.0 / TPS));
-			let Ok(dt) = now.elapsed() else { continue };
-			self.tick(dt.as_secs_f64());
+		thread::spawn(move || {
+			let mut last_frame = SystemTime::now();
+			loop {
+				if last_frame.elapsed().unwrap() >= FRAME_DURATION {
+					self.tick(last_frame.elapsed().unwrap().as_secs_f64());
+					last_frame = SystemTime::now();
+				}
+			}
 		});
 	}
 

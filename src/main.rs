@@ -1,3 +1,5 @@
+#![feature(duration_consts_float)]
+
 use app::App;
 mod app;
 mod render;

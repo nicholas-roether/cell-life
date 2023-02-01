@@ -50,6 +50,7 @@ impl Window {
 		let gl_display = gl_config.display();
 		let gl_surface = Self::create_surface(&window, &gl_display, &gl_config);
 		let gl_context = Self::create_active_context(&window, &gl_display, &gl_config, &gl_surface);
+		Self::configure_surface(&gl_surface, &gl_context);
 		let gl = Self::gl(&gl_display);
 		let size = Self::logical_size(&window, window.inner_size());
 		let renderer = Box::new(renderer_builder(Rc::clone(&gl)));
@@ -79,12 +80,20 @@ impl Window {
 			.run(move |event, _window_target, control_flow| self.handle_event(event, control_flow));
 	}
 
+	fn configure_surface(gl_surface: &Surface<WindowSurface>, gl_context: &PossiblyCurrentContext) {
+		gl_surface
+			.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait)
+			.unwrap_or_else(|err| {
+				eprintln!("Failed to disable swap interval on surface: {err}");
+			});
+	}
+
 	fn handle_event(&mut self, event: Event<f64>, control_flow: &mut ControlFlow) {
 		control_flow.set_wait();
 		match event {
 			Event::WindowEvent { event, .. } => self.handle_window_event(event, control_flow),
 			Event::RedrawRequested(_) => self.draw(),
-			Event::UserEvent(_) => self.draw(),
+			Event::UserEvent(_) => self.window.request_redraw(),
 			_ => ()
 		}
 	}
