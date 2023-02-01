@@ -137,7 +137,7 @@ struct TimingThread {
 	handles: Vec<Box<dyn SyncHandle>>
 }
 
-const TPS: f64 = 30.0;
+const TPS: f64 = 60.0;
 
 impl TimingThread {
 	fn new() -> Self {
