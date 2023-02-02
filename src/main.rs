@@ -5,6 +5,7 @@ use app::App;
 mod app;
 mod render;
 mod sim;
+mod utils;
 mod window;
 
 fn main() {
