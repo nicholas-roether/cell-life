@@ -43,10 +43,11 @@ impl<'a> AttractionAccumulator<'a> {
 
 impl<'a> Accumulator<&Mutex<Cell>, ()> for AttractionAccumulator<'a> {
 	fn accumulate(&mut self, other_cell: &Mutex<Cell>) {
+		let state_lock = self.cell_state.lock().unwrap();
 		let other_cell_lock = other_cell.lock().unwrap();
 		let other_cell_state_lock = other_cell_lock.state.lock().unwrap();
 		let attraction = self.receptor.color.dot(other_cell_state_lock.color);
-		let pos_difference = other_cell_state_lock.position - other_cell_state_lock.position;
+		let pos_difference = other_cell_state_lock.position - state_lock.position;
 		let distance = pos_difference.length();
 		let force_strength =
 			attraction * self.receptor.strength * other_cell_state_lock.size / distance;
