@@ -1,5 +1,4 @@
 use std::{
-	rc::Rc,
 	sync::{
 		mpsc::{self, Receiver, Sender},
 		Arc, RwLock
@@ -48,8 +47,8 @@ const APP_NAME: &str = "Cell Life";
 impl WindowThread {
 	fn new(simulation: Arc<RwLock<Simulation>>) -> Self {
 		let window = Window::new(APP_NAME, |gl| {
-			let mut renderer = Renderer::new(Rc::clone(&gl));
-			renderer.push_layer(DotsLayer::new(gl, simulation));
+			let mut renderer = Renderer::new(gl);
+			renderer.push_layer(|ctx| DotsLayer::new(ctx, simulation));
 			renderer
 		});
 		Self { window }

@@ -1,6 +1,8 @@
-use std::{mem::size_of, rc::Rc};
+use std::mem::size_of;
 
 use glow::{HasContext, VertexArray};
+
+use super::context::GraphicsContext;
 
 #[derive(Debug)]
 struct VertexAttribute {
@@ -57,20 +59,21 @@ impl VertexAttribute {
 
 #[derive(Debug)]
 pub struct VertexModel {
-	gl: Rc<glow::Context>,
+	ctx: GraphicsContext,
 	vertex_array: VertexArray,
 	vertex_size: usize,
 	attributes: Vec<VertexAttribute>
 }
 
 impl VertexModel {
-	pub fn new(gl: Rc<glow::Context>) -> Self {
+	fn new(ctx: GraphicsContext) -> Self {
 		let vertex_array = unsafe {
-			gl.create_vertex_array()
+			ctx.gl
+				.create_vertex_array()
 				.expect("Failed to create vertex array")
 		};
 		Self {
-			gl: Rc::clone(&gl),
+			ctx,
 			vertex_array,
 			vertex_size: 0,
 			attributes: Vec::new()
@@ -79,7 +82,7 @@ impl VertexModel {
 
 	pub fn bind(&self) {
 		unsafe {
-			self.gl.bind_vertex_array(Some(self.vertex_array));
+			self.ctx.gl.bind_vertex_array(Some(self.vertex_array));
 		}
 	}
 
@@ -93,8 +96,8 @@ impl VertexModel {
 		self.bind();
 		let mut offset = 0;
 		for (i, attr) in self.attributes.iter().enumerate() {
-			attr.register(&self.gl, i, self.vertex_size, offset);
-			unsafe { self.gl.enable_vertex_attrib_array(i as u32) }
+			attr.register(&self.ctx.gl, i, self.vertex_size, offset);
+			unsafe { self.ctx.gl.enable_vertex_attrib_array(i as u32) }
 			offset += attr.size as usize * attr.type_size;
 		}
 	}
@@ -102,6 +105,12 @@ impl VertexModel {
 
 impl Drop for VertexModel {
 	fn drop(&mut self) {
-		unsafe { self.gl.delete_vertex_array(self.vertex_array) }
+		unsafe { self.ctx.gl.delete_vertex_array(self.vertex_array) }
+	}
+}
+
+impl GraphicsContext {
+	pub fn make_vertex_model(&self) -> VertexModel {
+		VertexModel::new(self.clone())
 	}
 }

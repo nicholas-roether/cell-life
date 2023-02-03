@@ -1,19 +1,12 @@
-use std::{
-	rc::Rc,
-	sync::{Arc, RwLock}
-};
+use std::sync::{Arc, RwLock};
 
 use crevice::std430::{self, AsStd430};
 use glam::{vec2, Vec2, Vec3};
-use glow::HasContext;
 use winit::dpi::LogicalSize;
 
 use crate::render::{
-	buffer::Buffer,
-	renderer::Layer,
-	shader::{Shader, ShaderProgram},
-	vertex_model::VertexModel,
-	ObjectProvider
+	buffer::Buffer, context::GraphicsContext, renderer::Layer, shader::ShaderProgram,
+	vertex_model::VertexModel, ObjectProvider
 };
 
 #[derive(AsStd430)]
@@ -32,7 +25,7 @@ struct Vertex {
 }
 
 pub struct DotsLayer<P: ObjectProvider<Dot>> {
-	gl: Rc<glow::Context>,
+	ctx: GraphicsContext,
 	vertex_model: VertexModel,
 	vertex_buffer: Buffer,
 	obj_buffer: Buffer,
@@ -46,27 +39,27 @@ const FRAGMENT_SHADER: &str = include_str!("./shaders/dots.frag.glsl");
 const NUM_VERTICES: usize = 4;
 
 impl<P: ObjectProvider<Dot>> DotsLayer<P> {
-	pub fn new(gl: Rc<glow::Context>, dot_provider: Arc<RwLock<P>>) -> Self {
-		let mut vertex_model = VertexModel::new(Rc::clone(&gl));
+	pub fn new(ctx: GraphicsContext, dot_provider: Arc<RwLock<P>>) -> Self {
+		let mut vertex_model = ctx.make_vertex_model();
 		vertex_model.add_attribute(2, glow::FLOAT);
 		vertex_model.add_attribute(2, glow::FLOAT);
 
-		let vertex_buffer = Buffer::new(Rc::clone(&gl), glow::ARRAY_BUFFER);
+		let vertex_buffer = ctx.make_buffer(glow::ARRAY_BUFFER);
 		vertex_buffer.bind();
 		vertex_model.apply();
 
-		let obj_buffer = Buffer::new(Rc::clone(&gl), glow::SHADER_STORAGE_BUFFER);
+		let obj_buffer = ctx.make_buffer(glow::SHADER_STORAGE_BUFFER);
 
-		let vertex_shader = Shader::new(Rc::clone(&gl), glow::VERTEX_SHADER, VERTEX_SHADER);
-		let fragment_shader = Shader::new(Rc::clone(&gl), glow::FRAGMENT_SHADER, FRAGMENT_SHADER);
-		let shader_program =
-			ShaderProgram::new(Rc::clone(&gl), vec![vertex_shader, fragment_shader]);
+		let shader_program = ctx.make_program(vec![
+			ctx.make_shader(glow::VERTEX_SHADER, VERTEX_SHADER),
+			ctx.make_shader(glow::FRAGMENT_SHADER, FRAGMENT_SHADER),
+		]);
 
 		shader_program.activate();
 		vertex_model.bind();
 
 		Self {
-			gl,
+			ctx,
 			dot_provider,
 			vertex_model,
 			vertex_buffer,
@@ -129,9 +122,6 @@ impl<P: ObjectProvider<Dot>> Layer for DotsLayer<P> {
 		self.write_dots();
 		self.obj_buffer.bind_base(0);
 
-		unsafe {
-			self.gl
-				.draw_arrays(glow::TRIANGLE_STRIP, 0, NUM_VERTICES as i32);
-		}
+		self.ctx.draw(glow::TRIANGLE_STRIP, NUM_VERTICES);
 	}
 }
