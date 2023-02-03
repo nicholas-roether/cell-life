@@ -8,11 +8,12 @@ use std::{
 	time::{Duration, SystemTime}
 };
 
+use glam::{vec2, vec3};
 use winit::event_loop::EventLoopProxy;
 
 use crate::{
 	render::{layers::dots::DotsLayer, Renderer},
-	sim::{Simulation, Tick},
+	sim::{receptor::AttractionReceptor, Simulation, Tick},
 	window::Window
 };
 
@@ -178,7 +179,7 @@ pub struct App {
 
 impl App {
 	pub fn new() -> Self {
-		let simulation = Arc::new(RwLock::new(Simulation::new()));
+		let simulation = Arc::new(RwLock::new(Self::create_simulation()));
 
 		let mut timing_thread = TimingThread::new();
 		let window_thread = WindowThread::new(Arc::clone(&simulation));
@@ -192,6 +193,29 @@ impl App {
 			window_thread,
 			timing_thread
 		}
+	}
+
+	fn create_simulation() -> Simulation {
+		let mut sim = Simulation::new();
+		sim.add_cell(
+			10.0,
+			vec3(0.5, 0.5, 0.0),
+			vec2(0.0, 0.0),
+			vec![Box::new(AttractionReceptor::new(vec3(0.0, 60.0, 50.0)))]
+		);
+		sim.add_cell(
+			3.0,
+			vec3(0.2, 0.5, 1.0),
+			vec2(500.0, 10.0),
+			vec![Box::new(AttractionReceptor::new(vec3(10.0, 0.0, 0.0)))]
+		);
+		sim.add_cell(
+			5.0,
+			vec3(0.2, 0.5, 1.0),
+			vec2(-200.0, -100.0),
+			vec![Box::new(AttractionReceptor::new(vec3(50.0, 0.0, 0.0)))]
+		);
+		sim
 	}
 
 	pub fn start(self) {

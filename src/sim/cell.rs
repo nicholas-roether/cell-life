@@ -1,13 +1,17 @@
-use std::sync::Mutex;
+use std::{f32::consts::PI, sync::Mutex};
 
 use glam::{Vec2, Vec3};
 
-use crate::{render::layers, utils::Accumulator};
+use crate::{
+	ecs::{Ecs, Entity},
+	render::layers
+};
 
-use super::receptor::Receptor;
+use super::receptor::{InteractionAccumulator, Receptor};
 
 #[derive(Debug)]
-pub struct CellState {
+pub struct Cell {
+	pub entity: Entity,
 	pub size: f32,
 	pub color: Vec3,
 	pub energy: f32,
@@ -16,7 +20,9 @@ pub struct CellState {
 	pub acceleration: Vec2
 }
 
-impl CellState {
+const DENSITY: f32 = 1.0;
+
+impl Cell {
 	pub fn consume_energy(&mut self, cost: f32) -> f32 {
 		if self.energy <= 0.0 {
 			return 0.0;
@@ -29,58 +35,79 @@ impl CellState {
 		self.energy = 0.0;
 		fraction_available
 	}
-}
 
-#[derive(Debug)]
-pub struct Cell {
-	pub state: Mutex<CellState>,
-	receptors: Vec<Box<dyn Receptor>>
-}
-
-impl Cell {
-	pub fn new(size: f32, color: Vec3, position: Vec2, receptors: Vec<Box<dyn Receptor>>) -> Self {
-		Self {
-			state: Mutex::new(CellState {
-				size,
-				color,
-				energy: 0.0,
-				position,
-				velocity: Vec2::ZERO,
-				acceleration: Vec2::ZERO
-			}),
-			receptors
-		}
+	pub fn mass(&self) -> f32 {
+		PI * self.size.powi(2) * DENSITY
 	}
 
-	pub fn tick(&mut self, dt: f64, other_cells: Box<dyn Iterator<Item = &Mutex<Cell>> + '_>) {
-		let mut state_lock = self.state.lock().unwrap();
+	fn apply_force(&mut self, force: Vec2) {
+		self.acceleration = force / self.mass();
+	}
 
-		let delta_velocity = state_lock.acceleration * dt as f32;
-		state_lock.velocity += delta_velocity;
+	fn sim_movement(&mut self, dt: f32) {
+		self.velocity += self.acceleration * dt;
+		self.position += self.velocity * dt;
+	}
 
-		let delta_position = state_lock.velocity * dt as f32;
-		state_lock.position += delta_position;
+	fn apply_effects(&mut self, ecs: &Mutex<Ecs<Box<dyn Receptor>>>, other_cells: &[&Mutex<Cell>]) {
+		self.acceleration = Vec2::ZERO;
+		self.apply_receptor_effects(ecs, other_cells);
+	}
 
-		let mut accumulators: Vec<Box<dyn Accumulator<&Mutex<Cell>, ()>>> = vec![];
+	fn apply_receptor_effects(
+		&mut self,
+		ecs: &Mutex<Ecs<Box<dyn Receptor>>>,
+		other_cells: &[&Mutex<Cell>]
+	) {
+		let ecs_lock = ecs.lock().unwrap();
+		let mut accumulators: Vec<Box<dyn InteractionAccumulator>> = ecs_lock
+			.components(self.entity)
+			.iter()
+			.map(|rec| rec.interaction_accumulator())
+			.collect();
 
-		for rec in &self.receptors {
-			accumulators.push(rec.apply_effect(&self.state));
-		}
-
-		for cell in other_cells {
+		for other_cell in other_cells {
 			for acc in &mut accumulators {
-				acc.accumulate(&cell)
+				acc.add_interaction(self, other_cell)
 			}
 		}
 
+		let mut force = Vec2::ZERO;
+
 		for acc in &mut accumulators {
-			acc.complete();
+			force += acc.complete(self);
 		}
+
+		self.apply_force(force);
 	}
 }
 
-impl From<&Mutex<CellState>> for layers::dots::Dot {
-	fn from(value: &Mutex<CellState>) -> Self {
+impl Cell {
+	pub fn new(entity: Entity) -> Self {
+		Self {
+			entity,
+			size: 0.0,
+			color: Vec3::ZERO,
+			energy: 10.0,
+			position: Vec2::ZERO,
+			velocity: Vec2::ZERO,
+			acceleration: Vec2::ZERO
+		}
+	}
+
+	pub fn tick(
+		&mut self,
+		ecs: &Mutex<Ecs<Box<dyn Receptor>>>,
+		dt: f64,
+		other_cells: &[&Mutex<Cell>]
+	) {
+		self.sim_movement(dt as f32);
+		self.apply_effects(ecs, other_cells);
+	}
+}
+
+impl From<&Mutex<Cell>> for layers::dots::Dot {
+	fn from(value: &Mutex<Cell>) -> Self {
 		let state_lock = value.lock().unwrap();
 		layers::dots::Dot {
 			coords: state_lock.position,

@@ -1,10 +1,16 @@
 use std::sync::Mutex;
 
-use glam::{vec2, vec3};
+use glam::{Vec2, Vec3};
 
-use crate::render::{layers, ObjectProvider};
+use crate::{
+	ecs::{Ecs, Entity},
+	render::{layers, ObjectProvider}
+};
 
-use super::{cell::Cell, receptor::AttractionReceptor};
+use super::{
+	cell::Cell,
+	receptor::{BaseReceptor, Receptor}
+};
 
 pub trait Tick {
 	fn tick(&mut self, dt: f64);
@@ -12,58 +18,62 @@ pub trait Tick {
 
 #[derive(Debug)]
 pub struct Simulation {
+	ecs: Mutex<Ecs<Box<dyn Receptor>>>,
 	cells: Vec<Mutex<Cell>>
 }
 
 impl Simulation {
 	pub fn new() -> Self {
 		Self {
-			cells: vec![
-				Mutex::new(Cell::new(
-					5.0,
-					vec3(1.0, 0.3, 0.3),
-					vec2(-30.0, 0.0),
-					vec![Box::new(AttractionReceptor::new(vec3(0.0, 1.0, 0.0), 1.0))]
-				)),
-				Mutex::new(Cell::new(8.0, vec3(0.3, 1.0, 0.3), vec2(30.0, 0.0), vec![])),
-				Mutex::new(Cell::new(
-					3.0,
-					vec3(0.3, 0.3, 1.0),
-					vec2(0.0, -40.0),
-					vec![]
-				)),
-			]
+			ecs: Mutex::new(Ecs::new()),
+			cells: Vec::new()
 		}
+	}
+
+	pub fn add_cell(
+		&mut self,
+		size: f32,
+		color: Vec3,
+		position: Vec2,
+		receptors: Vec<Box<dyn Receptor>>
+	) {
+		let entity = self.create_cell_entity(receptors);
+		let mut cell = Cell::new(entity);
+		cell.size = size;
+		cell.color = color;
+		cell.position = position;
+		self.cells.push(Mutex::new(cell));
+	}
+
+	fn create_cell_entity(&mut self, receptors: Vec<Box<dyn Receptor>>) -> Entity {
+		let mut ecs_lock = self.ecs.lock().unwrap();
+		let entity = ecs_lock.entity();
+		ecs_lock.add_component(entity, Box::new(BaseReceptor::new()));
+		for receptor in receptors {
+			ecs_lock.add_component(entity, receptor);
+		}
+		entity
 	}
 }
 
 impl Tick for Simulation {
 	fn tick(&mut self, dt: f64) {
-		// FIXME this causes a deadlock
-		// for (i, cell) in self.cells.iter().enumerate() {
-		// 	let mut cell_lock = cell.lock().unwrap();
-		// 	let other_cells: Vec<&Mutex<Cell>> = self
-		// 		.cells
-		// 		.iter()
-		// 		.enumerate()
-		// 		.filter_map(|(j, cell)| {
-		// 			if i == j {
-		// 				return None;
-		// 			}
-		// 			Some(cell)
-		// 		})
-		// 		.collect();
-		// 	cell_lock.tick(dt, Box::new(other_cells.into_iter()));
-		// }
+		for (i, cell) in self.cells.iter().enumerate() {
+			let mut cell_lock = cell.lock().unwrap();
+			let other_cells: Vec<&Mutex<Cell>> = self
+				.cells
+				.iter()
+				.enumerate()
+				.filter_map(|(j, cell)| if i == j { None } else { Some(cell) })
+				.collect();
+			cell_lock.tick(&self.ecs, dt, &other_cells);
+		}
 	}
 }
 
 impl ObjectProvider<layers::dots::Dot> for Simulation {
 	fn iter_objects(&self) -> Box<dyn Iterator<Item = layers::dots::Dot> + '_> {
-		let iter = self
-			.cells
-			.iter()
-			.map(|cell| (&cell.lock().unwrap().state).into());
+		let iter = self.cells.iter().map(|cell| cell.into());
 		Box::new(iter)
 	}
 }

@@ -3,9 +3,9 @@
 
 use app::App;
 mod app;
+mod ecs;
 mod render;
 mod sim;
-mod utils;
 mod window;
 
 fn main() {

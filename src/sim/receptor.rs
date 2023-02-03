@@ -2,72 +2,116 @@ use std::{fmt::Debug, sync::Mutex};
 
 use glam::{Vec2, Vec3};
 
-use crate::utils::Accumulator;
+use super::cell::Cell;
 
-use super::cell::{Cell, CellState};
+pub trait InteractionAccumulator {
+	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>);
+
+	fn complete(&mut self, cell: &mut Cell) -> Vec2;
+}
 
 pub trait Receptor: Debug + Send + Sync {
-	fn apply_effect<'a>(
-		&'a self,
-		cell_state: &'a Mutex<CellState>
-	) -> Box<dyn Accumulator<&'a Mutex<Cell>, ()> + 'a>;
+	fn interaction_accumulator<'a>(&'a self) -> Box<dyn InteractionAccumulator + 'a>;
 }
 
 #[derive(Debug)]
 pub struct AttractionReceptor {
-	color: Vec3,
-	strength: f32
+	strength: Vec3
 }
 
 impl AttractionReceptor {
-	pub fn new(color: Vec3, strength: f32) -> Self {
-		Self { color, strength }
+	pub fn new(strength: Vec3) -> Self {
+		Self { strength }
 	}
 }
 
 struct AttractionAccumulator<'a> {
 	receptor: &'a AttractionReceptor,
-	cell_state: &'a Mutex<CellState>,
 	force: Vec2
 }
 
 impl<'a> AttractionAccumulator<'a> {
-	fn new(receptor: &'a AttractionReceptor, cell_state: &'a Mutex<CellState>) -> Self {
+	fn new(receptor: &'a AttractionReceptor) -> Self {
 		Self {
 			receptor,
-			cell_state,
 			force: Vec2::ZERO
 		}
 	}
 }
 
-impl<'a> Accumulator<&Mutex<Cell>, ()> for AttractionAccumulator<'a> {
-	fn accumulate(&mut self, other_cell: &Mutex<Cell>) {
-		let state_lock = self.cell_state.lock().unwrap();
+const ATTRACTION_STRENGTH: f32 = 50.0;
+const ATTRACTION_COST: f32 = 0.0000001;
+const ATTRACTION_RANGE: f32 = 500.0;
+
+impl<'a> InteractionAccumulator for AttractionAccumulator<'a> {
+	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>) {
 		let other_cell_lock = other_cell.lock().unwrap();
-		let other_cell_state_lock = other_cell_lock.state.lock().unwrap();
-		let attraction = self.receptor.color.dot(other_cell_state_lock.color);
-		let pos_difference = other_cell_state_lock.position - state_lock.position;
+		let attraction = self.receptor.strength.dot(other_cell_lock.color);
+		let pos_difference = other_cell_lock.position - cell.position;
 		let distance = pos_difference.length();
-		let force_strength =
-			attraction * self.receptor.strength * other_cell_state_lock.size / distance;
+		if distance >= ATTRACTION_RANGE {
+			return;
+		}
+
+		let force_strength = ATTRACTION_STRENGTH * attraction * other_cell_lock.mass();
 		self.force += force_strength * pos_difference.normalize();
 	}
 
-	fn complete(&mut self) -> () {
-		let mut state_lock = self.cell_state.lock().unwrap();
-		let energy_cost = self.force.length();
-		let full_acceleration = self.force / state_lock.size;
-		let actual_acceleration = state_lock.consume_energy(energy_cost) * full_acceleration;
-		state_lock.acceleration += actual_acceleration;
+	fn complete(&mut self, cell: &mut Cell) -> Vec2 {
+		let energy_cost = self.force.length() * ATTRACTION_COST;
+		cell.consume_energy(energy_cost) * self.force
 	}
 }
 
 impl Receptor for AttractionReceptor {
-	fn apply_effect<'a>(
-		&'a self,
-		cell_state: &'a Mutex<CellState>
-	) -> Box<dyn Accumulator<&'a Mutex<Cell>, ()> + 'a> {
-		Box::new(AttractionAccumulator::new(self, cell_state))
+	fn interaction_accumulator<'a>(&'a self) -> Box<dyn InteractionAccumulator + 'a> {
+		Box::new(AttractionAccumulator::new(self))
+	}
+}
+
+#[derive(Debug)]
+pub struct BaseReceptor;
+
+impl BaseReceptor {
+	#[inline]
+	pub fn new() -> Self {
+		Self {}
+	}
+}
+
+pub struct BaseAccumulator {
+	force: Vec2
+}
+
+const BASE_REPULSION_STRENGTH: f32 = 3000000.0;
+const FRICTION: f32 = 10.0;
+
+impl BaseAccumulator {
+	fn new() -> Self {
+		Self { force: Vec2::ZERO }
+	}
+}
+
+impl InteractionAccumulator for BaseAccumulator {
+	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>) {
+		let pos_difference = {
+			let other_cell_lock = other_cell.lock().unwrap();
+			other_cell_lock.position - cell.position
+		};
+		let distance = pos_difference.length();
+		let direction = pos_difference.normalize();
+
+		let force_strength = BASE_REPULSION_STRENGTH * (cell.size / distance).powi(2);
+		self.force -= force_strength * direction;
+	}
+
+	fn complete(&mut self, cell: &mut Cell) -> Vec2 {
+		self.force - FRICTION * cell.velocity * cell.mass()
+	}
+}
+
+impl Receptor for BaseReceptor {
+	fn interaction_accumulator<'a>(&'a self) -> Box<dyn InteractionAccumulator + 'a> {
+		Box::new(BaseAccumulator::new())
 	}
 }
