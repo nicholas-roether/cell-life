@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
 	cell::Cell,
-	receptor::{BaseReceptor, Receptor}
+	receptors::{base::BaseReceptor, Receptor}
 };
 
 pub trait Tick {

@@ -13,7 +13,7 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::{
 	render::{layers::dots::DotsLayer, Renderer},
-	sim::{receptor::AttractionReceptor, Simulation, Tick},
+	sim::{receptors::attract::AttractionReceptor, Simulation, Tick},
 	window::Window
 };
 

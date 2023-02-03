@@ -7,7 +7,7 @@ use crate::{
 	render::layers
 };
 
-use super::receptor::{InteractionAccumulator, Receptor};
+use super::receptors::{InteractionAccumulator, Receptor};
 
 #[derive(Debug)]
 pub struct Cell {
