@@ -54,6 +54,13 @@ impl Simulation {
 		}
 		entity
 	}
+
+	fn kill_dead_cells(&mut self) {
+		self.cells.retain(|cell| {
+			let cell_lock = cell.lock().unwrap();
+			cell_lock.health > 0.0
+		});
+	}
 }
 
 impl Tick for Simulation {
@@ -68,6 +75,7 @@ impl Tick for Simulation {
 				.collect();
 			cell_lock.tick(&self.ecs, dt, &other_cells);
 		}
+		self.kill_dead_cells();
 	}
 }
 

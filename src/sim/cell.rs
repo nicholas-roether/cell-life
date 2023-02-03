@@ -12,6 +12,7 @@ use super::receptors::{InteractionAccumulator, Receptor};
 #[derive(Debug)]
 pub struct Cell {
 	pub entity: Entity,
+	pub health: f32,
 	pub size: f32,
 	pub color: Vec3,
 	pub energy: f32,
@@ -21,6 +22,8 @@ pub struct Cell {
 }
 
 const DENSITY: f32 = 1.0;
+const REGEN_SPEED: f32 = 0.2;
+const MAX_HEALTH: f32 = 3.0;
 
 impl Cell {
 	pub fn consume_energy(&mut self, cost: f32) -> f32 {
@@ -38,6 +41,14 @@ impl Cell {
 
 	pub fn mass(&self) -> f32 {
 		PI * self.size.powi(2) * DENSITY
+	}
+
+	fn handle_health(&mut self, dt: f32) {
+		if self.energy == 0.0 {
+			self.health -= dt;
+		} else if self.health <= MAX_HEALTH {
+			self.health = f32::min(self.health + REGEN_SPEED * dt, MAX_HEALTH)
+		}
 	}
 
 	fn apply_force(&mut self, force: Vec2) {
@@ -86,6 +97,7 @@ impl Cell {
 	pub fn new(entity: Entity) -> Self {
 		Self {
 			entity,
+			health: 3.0,
 			size: 0.0,
 			color: Vec3::ZERO,
 			energy: 10.0,
@@ -102,6 +114,7 @@ impl Cell {
 		other_cells: &[&Mutex<Cell>]
 	) {
 		self.sim_movement(dt as f32);
+		self.handle_health(dt as f32);
 		self.apply_effects(ecs, other_cells);
 	}
 }
