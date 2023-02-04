@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 use crevice::std430::{self, AsStd430};
 use glam::{vec2, Vec2, Vec3};
@@ -30,7 +30,7 @@ pub struct DotsLayer<P: ObjectProvider<Dot>> {
 	vertex_buffer: Buffer,
 	obj_buffer: Buffer,
 	shader_program: ShaderProgram,
-	dot_provider: Arc<RwLock<P>>
+	dot_provider: Arc<Mutex<P>>
 }
 
 const VERTEX_SHADER: &str = include_str!("./shaders/dots.vert.glsl");
@@ -39,7 +39,7 @@ const FRAGMENT_SHADER: &str = include_str!("./shaders/dots.frag.glsl");
 const NUM_VERTICES: usize = 4;
 
 impl<P: ObjectProvider<Dot>> DotsLayer<P> {
-	pub fn new(ctx: GraphicsContext, dot_provider: Arc<RwLock<P>>) -> Self {
+	pub fn new(ctx: GraphicsContext, dot_provider: Arc<Mutex<P>>) -> Self {
 		let mut vertex_model = ctx.make_vertex_model();
 		vertex_model.add_attribute(2, glow::FLOAT);
 		vertex_model.add_attribute(2, glow::FLOAT);
@@ -55,9 +55,6 @@ impl<P: ObjectProvider<Dot>> DotsLayer<P> {
 			ctx.make_shader(glow::FRAGMENT_SHADER, FRAGMENT_SHADER),
 		]);
 
-		shader_program.activate();
-		vertex_model.bind();
-
 		Self {
 			ctx,
 			dot_provider,
@@ -72,7 +69,7 @@ impl<P: ObjectProvider<Dot>> DotsLayer<P> {
 		let dots: Vec<Dot> = {
 			let dot_provider = self
 				.dot_provider
-				.read()
+				.lock()
 				.expect("Failed to get read lock on dot provider");
 			dot_provider.iter_objects().collect()
 		};

@@ -1,9 +1,10 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use glam::{Vec2, Vec3};
 
 use crate::{
 	ecs::{Ecs, Entity},
+	particles::{GroupSpawnProps, ParticleSystem},
 	render::{layers, ObjectProvider}
 };
 
@@ -18,13 +19,21 @@ pub trait Tick {
 
 #[derive(Debug)]
 pub struct Simulation {
+	particle_system: Arc<Mutex<ParticleSystem>>,
 	ecs: Mutex<Ecs<Box<dyn Receptor>>>,
 	cells: Vec<Mutex<Cell>>
 }
 
+struct DeathParticles {
+	color: Vec3,
+	position: Vec2,
+	spread: f32
+}
+
 impl Simulation {
-	pub fn new() -> Self {
+	pub fn new(particle_system: Arc<Mutex<ParticleSystem>>) -> Self {
 		Self {
+			particle_system,
 			ecs: Mutex::new(Ecs::new()),
 			cells: Vec::new()
 		}
@@ -56,10 +65,43 @@ impl Simulation {
 	}
 
 	fn kill_dead_cells(&mut self) {
+		let mut death_particles = Vec::<DeathParticles>::new();
 		self.cells.retain(|cell| {
 			let cell_lock = cell.lock().unwrap();
-			cell_lock.health > 0.0
+			let still_alive = cell_lock.health > 0.0;
+			if !still_alive {
+				death_particles.push(DeathParticles {
+					color: cell_lock.color,
+					position: cell_lock.position,
+					spread: cell_lock.size
+				})
+			}
+			still_alive
 		});
+		for particles in death_particles {
+			self.spawn_death_particles(particles);
+		}
+	}
+
+	fn spawn_death_particles(
+		&self,
+		DeathParticles {
+			color,
+			spread,
+			position
+		}: DeathParticles
+	) {
+		let mut ps_lock = self.particle_system.lock().unwrap();
+		ps_lock.spawn_particle_group(GroupSpawnProps {
+			color,
+			count: 30,
+			position,
+			velocity: 50.0,
+			lifetime: 1.0,
+			spread,
+			size: 15.0,
+			opacity: 0.2
+		})
 	}
 }
 

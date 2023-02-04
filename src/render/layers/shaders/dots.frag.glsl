@@ -1,6 +1,6 @@
 #version 430 core
 
-precision highp float;
+precision mediump float;
 
 struct Dot {
 	vec2 coords;

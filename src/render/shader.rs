@@ -42,7 +42,7 @@ impl Drop for Shader {
 }
 
 pub struct ShaderProgram {
-	ctx: GraphicsContext,
+	pub ctx: GraphicsContext,
 	native_program: NativeProgram
 }
 
@@ -68,6 +68,11 @@ impl ShaderProgram {
 				native_program
 			}
 		}
+	}
+
+	pub fn get_uniform_location(&self, name: &str) -> Option<glow::UniformLocation> {
+		self.activate();
+		unsafe { self.ctx.gl.get_uniform_location(self.native_program, name) }
 	}
 
 	pub fn activate(&self) {

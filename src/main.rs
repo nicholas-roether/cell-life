@@ -4,6 +4,7 @@
 use app::App;
 mod app;
 mod ecs;
+mod particles;
 mod render;
 mod sim;
 mod window;

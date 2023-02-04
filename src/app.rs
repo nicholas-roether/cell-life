@@ -1,7 +1,7 @@
 use std::{
 	sync::{
 		mpsc::{self, Receiver, Sender},
-		Arc, RwLock
+		Arc, Mutex
 	},
 	thread,
 	time::{Duration, SystemTime}
@@ -11,7 +11,11 @@ use glam::{vec2, vec3};
 use winit::event_loop::EventLoopProxy;
 
 use crate::{
-	render::{layers::dots::DotsLayer, Renderer},
+	particles::ParticleSystem,
+	render::{
+		layers::{dots::DotsLayer, particles::ParticlesLayer},
+		Renderer
+	},
 	sim::{receptors::attract::AttractionReceptor, Simulation, Tick},
 	window::Window
 };
@@ -45,10 +49,14 @@ struct WindowThread {
 const APP_NAME: &str = "Cell Life";
 
 impl WindowThread {
-	fn new(simulation: Arc<RwLock<Simulation>>) -> Self {
+	fn new(
+		simulation: Arc<Mutex<Simulation>>,
+		particle_system: Arc<Mutex<ParticleSystem>>
+	) -> Self {
 		let window = Window::new(APP_NAME, |gl| {
 			let mut renderer = Renderer::new(gl);
 			renderer.push_layer(|ctx| DotsLayer::new(ctx, simulation));
+			renderer.push_layer(|ctx| ParticlesLayer::new(ctx, particle_system));
 			renderer
 		});
 		Self { window }
@@ -111,14 +119,20 @@ struct SimThread {
 }
 
 impl SimThread {
-	fn new(simulation: Arc<RwLock<Simulation>>) -> Self {
+	fn new(
+		simulation: Arc<Mutex<Simulation>>,
+		particle_system: Arc<Mutex<ParticleSystem>>
+	) -> Self {
 		let synced_thread = SyncedThread::new(move |recv| {
 			for dt in recv {
-				let  Ok(mut sim) = simulation.write() else {
-					eprintln!("Failed to acquire lock on simulation");
-					continue;
-				};
-				sim.tick(dt)
+				{
+					let mut sim_lock = simulation.lock().unwrap();
+					sim_lock.tick(dt);
+				}
+				{
+					let mut ps_lock = particle_system.lock().unwrap();
+					ps_lock.tick(dt);
+				}
 			}
 		});
 		Self { synced_thread }
@@ -178,11 +192,15 @@ pub struct App {
 
 impl App {
 	pub fn new() -> Self {
-		let simulation = Arc::new(RwLock::new(Self::create_simulation()));
+		let particle_system = Arc::new(Mutex::new(ParticleSystem::new()));
+		let simulation = Arc::new(Mutex::new(Self::create_simulation(Arc::clone(
+			&particle_system
+		))));
 
 		let mut timing_thread = TimingThread::new();
-		let window_thread = WindowThread::new(Arc::clone(&simulation));
-		let sim_thread = SimThread::new(simulation);
+		let window_thread =
+			WindowThread::new(Arc::clone(&simulation), Arc::clone(&particle_system));
+		let sim_thread = SimThread::new(simulation, particle_system);
 
 		timing_thread.add_handle(sim_thread.sync_handle());
 		timing_thread.add_handle(window_thread.sync_handle());
@@ -194,8 +212,8 @@ impl App {
 		}
 	}
 
-	fn create_simulation() -> Simulation {
-		let mut sim = Simulation::new();
+	fn create_simulation(particle_system: Arc<Mutex<ParticleSystem>>) -> Simulation {
+		let mut sim = Simulation::new(particle_system);
 		sim.add_cell(
 			10.0,
 			vec3(0.5, 0.5, 0.0),
