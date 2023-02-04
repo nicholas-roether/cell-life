@@ -32,11 +32,11 @@ impl<'a> AttractionAccumulator<'a> {
 }
 
 const ATTRACTION_STRENGTH: f32 = 50.0;
-const ATTRACTION_COST: f32 = 0.0000001;
+const ATTRACTION_COST: f64 = 0.0000002;
 const ATTRACTION_RANGE: f32 = 500.0;
 
 impl<'a> InteractionAccumulator for AttractionAccumulator<'a> {
-	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>) {
+	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>, _dt: f64) {
 		let other_cell_lock = other_cell.lock().unwrap();
 		let attraction = self.receptor.strength.dot(other_cell_lock.color);
 		let pos_difference = other_cell_lock.position - cell.position;
@@ -49,8 +49,8 @@ impl<'a> InteractionAccumulator for AttractionAccumulator<'a> {
 		self.force += force_strength * pos_difference.normalize();
 	}
 
-	fn complete(&mut self, cell: &mut Cell) -> Vec2 {
-		let energy_cost = self.force.length() * ATTRACTION_COST;
+	fn complete(&mut self, cell: &mut Cell, dt: f64) -> Vec2 {
+		let energy_cost = self.force.length() as f64 * ATTRACTION_COST * dt;
 		cell.consume_energy(energy_cost) * self.force
 	}
 }

@@ -21,6 +21,7 @@ pub struct BaseAccumulator {
 }
 
 const BASE_REPULSION_STRENGTH: f32 = 3000000.0;
+const BASE_ENERGY_CONSUMPTION: f64 = 0.1;
 const FRICTION: f32 = 10.0;
 
 impl BaseAccumulator {
@@ -30,7 +31,7 @@ impl BaseAccumulator {
 }
 
 impl InteractionAccumulator for BaseAccumulator {
-	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>) {
+	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>, _dt: f64) {
 		let pos_difference = {
 			let other_cell_lock = other_cell.lock().unwrap();
 			other_cell_lock.position - cell.position
@@ -42,7 +43,8 @@ impl InteractionAccumulator for BaseAccumulator {
 		self.force -= force_strength * direction;
 	}
 
-	fn complete(&mut self, cell: &mut Cell) -> Vec2 {
+	fn complete(&mut self, cell: &mut Cell, dt: f64) -> Vec2 {
+		cell.consume_energy(BASE_ENERGY_CONSUMPTION * dt);
 		self.force - FRICTION * cell.velocity * cell.mass()
 	}
 }

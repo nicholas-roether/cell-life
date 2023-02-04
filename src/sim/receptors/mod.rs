@@ -8,9 +8,9 @@ pub mod attract;
 pub mod base;
 
 pub trait InteractionAccumulator {
-	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>);
+	fn add_interaction(&mut self, cell: &Cell, other_cell: &Mutex<Cell>, dt: f64);
 
-	fn complete(&mut self, cell: &mut Cell) -> Vec2;
+	fn complete(&mut self, cell: &mut Cell, dt: f64) -> Vec2;
 }
 
 pub trait Receptor: Debug + Send + Sync {

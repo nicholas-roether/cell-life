@@ -15,7 +15,7 @@ pub struct Cell {
 	pub health: f32,
 	pub size: f32,
 	pub color: Vec3,
-	pub energy: f32,
+	pub energy: f64,
 	pub position: Vec2,
 	pub velocity: Vec2,
 	pub acceleration: Vec2
@@ -26,7 +26,7 @@ const REGEN_SPEED: f32 = 0.2;
 const MAX_HEALTH: f32 = 3.0;
 
 impl Cell {
-	pub fn consume_energy(&mut self, cost: f32) -> f32 {
+	pub fn consume_energy(&mut self, cost: f64) -> f32 {
 		if self.energy <= 0.0 {
 			return 0.0;
 		}
@@ -36,7 +36,7 @@ impl Cell {
 		}
 		let fraction_available = self.energy / cost;
 		self.energy = 0.0;
-		fraction_available
+		fraction_available as f32
 	}
 
 	pub fn mass(&self) -> f32 {
@@ -60,15 +60,21 @@ impl Cell {
 		self.position += self.velocity * dt;
 	}
 
-	fn apply_effects(&mut self, ecs: &Mutex<Ecs<Box<dyn Receptor>>>, other_cells: &[&Mutex<Cell>]) {
+	fn apply_effects(
+		&mut self,
+		ecs: &Mutex<Ecs<Box<dyn Receptor>>>,
+		other_cells: &[&Mutex<Cell>],
+		dt: f64
+	) {
 		self.acceleration = Vec2::ZERO;
-		self.apply_receptor_effects(ecs, other_cells);
+		self.apply_receptor_effects(ecs, other_cells, dt);
 	}
 
 	fn apply_receptor_effects(
 		&mut self,
 		ecs: &Mutex<Ecs<Box<dyn Receptor>>>,
-		other_cells: &[&Mutex<Cell>]
+		other_cells: &[&Mutex<Cell>],
+		dt: f64
 	) {
 		let ecs_lock = ecs.lock().unwrap();
 		let mut accumulators: Vec<Box<dyn InteractionAccumulator>> = ecs_lock
@@ -79,14 +85,14 @@ impl Cell {
 
 		for other_cell in other_cells {
 			for acc in &mut accumulators {
-				acc.add_interaction(self, other_cell)
+				acc.add_interaction(self, other_cell, dt)
 			}
 		}
 
 		let mut force = Vec2::ZERO;
 
 		for acc in &mut accumulators {
-			force += acc.complete(self);
+			force += acc.complete(self, dt);
 		}
 
 		self.apply_force(force);
@@ -115,7 +121,7 @@ impl Cell {
 	) {
 		self.sim_movement(dt as f32);
 		self.handle_health(dt as f32);
-		self.apply_effects(ecs, other_cells);
+		self.apply_effects(ecs, other_cells, dt);
 	}
 }
 
@@ -126,7 +132,7 @@ impl From<&Mutex<Cell>> for layers::dots::Dot {
 			coords: state_lock.position,
 			radius: state_lock.size,
 			color: state_lock.color,
-			brightness: state_lock.energy
+			brightness: state_lock.energy as f32
 		}
 	}
 }
