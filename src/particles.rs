@@ -1,9 +1,11 @@
-use std::{f32::consts::TAU, time::SystemTime};
+use std::time::SystemTime;
 
 use glam::{Vec2, Vec3};
-use rand::random;
 
-use crate::render::{layers, ObjectProvider};
+use crate::{
+	rand::{rand, rand_point_in_circle, rand_with_spread},
+	render::{layers, ObjectProvider}
+};
 
 #[derive(Debug)]
 struct ParticleState {
@@ -94,30 +96,12 @@ impl ParticleSystem {
 			.retain(|p| p.birthtime.elapsed().unwrap().as_secs_f32() < p.lifetime);
 	}
 
-	fn generate_point_in_radius(radius: f32) -> Vec2 {
-		let rand_radius = random::<f32>().sqrt() * radius;
-		let rand_angle = TAU * random::<f32>();
-		rand_radius * Vec2::from_angle(rand_angle)
-	}
-
 	fn generate_points_in_radius(radius: f32, num_points: usize) -> Vec<Vec2> {
 		let mut points = Vec::with_capacity(num_points);
 		for _ in 0..num_points {
-			points.push(Self::generate_point_in_radius(radius))
+			points.push(rand_point_in_circle(radius))
 		}
 		points
-	}
-
-	fn generate_opacity(opacity: f32) -> f32 {
-		opacity + OPACITY_SPREAD * (random::<f32>() - 1.0) / 2.0
-	}
-
-	fn generate_lifetime(base_lifetime: f32) -> f32 {
-		base_lifetime + LIFETIME_SPREAD * (random::<f32>() - 1.0) / 2.0
-	}
-
-	fn generate_angular_velocity() -> f32 {
-		MAX_ANGULAR_VELOCITY * random::<f32>()
 	}
 
 	fn generate_particle(
@@ -130,10 +114,10 @@ impl ParticleSystem {
 		Particle {
 			shape: Self::generate_points_in_radius(size, 3),
 			velocity,
-			angular_velocity: Self::generate_angular_velocity(),
-			lifetime: Self::generate_lifetime(base_lifetime),
+			angular_velocity: rand() * MAX_ANGULAR_VELOCITY,
+			lifetime: rand_with_spread(base_lifetime, LIFETIME_SPREAD),
 			birthtime: SystemTime::now(),
-			opacity: Self::generate_opacity(opacity),
+			opacity: rand_with_spread(opacity, OPACITY_SPREAD),
 			state: ParticleState {
 				position,
 				rotation: 0.0
