@@ -1,6 +1,10 @@
-use std::sync::{Arc, Mutex};
+use std::{
+	collections::HashMap,
+	sync::{Arc, Mutex, MutexGuard}
+};
 
 use glam::{Vec2, Vec3};
+use uuid::Uuid;
 
 use crate::{
 	ecs::{Ecs, Entity},
@@ -21,7 +25,7 @@ pub trait Tick {
 pub struct Simulation {
 	particle_system: Arc<Mutex<ParticleSystem>>,
 	ecs: Mutex<Ecs<Box<dyn Receptor>>>,
-	cells: Vec<Mutex<Cell>>
+	cells: HashMap<Uuid, Mutex<Cell>>
 }
 
 struct DeathParticles {
@@ -30,12 +34,22 @@ struct DeathParticles {
 	spread: f32
 }
 
+impl DeathParticles {
+	fn for_cell(cell: &MutexGuard<'_, Cell>) -> Self {
+		Self {
+			color: cell.color,
+			position: cell.position,
+			spread: cell.size
+		}
+	}
+}
+
 impl Simulation {
 	pub fn new(particle_system: Arc<Mutex<ParticleSystem>>) -> Self {
 		Self {
 			particle_system,
 			ecs: Mutex::new(Ecs::new()),
-			cells: Vec::new()
+			cells: HashMap::new()
 		}
 	}
 
@@ -51,7 +65,7 @@ impl Simulation {
 		cell.size = size;
 		cell.color = color;
 		cell.position = position;
-		self.cells.push(Mutex::new(cell));
+		self.cells.insert(Uuid::new_v4(), Mutex::new(cell));
 	}
 
 	fn create_cell_entity(&mut self, receptors: Vec<Box<dyn Receptor>>) -> Entity {
@@ -66,20 +80,27 @@ impl Simulation {
 
 	fn kill_dead_cells(&mut self) {
 		let mut death_particles = Vec::<DeathParticles>::new();
-		self.cells.retain(|cell| {
+		let mut dead_ids = Vec::<Uuid>::new();
+
+		for (id, cell) in &self.cells {
 			let cell_lock = cell.lock().unwrap();
-			let still_alive = cell_lock.health > 0.0;
-			if !still_alive {
-				death_particles.push(DeathParticles {
-					color: cell_lock.color,
-					position: cell_lock.position,
-					spread: cell_lock.size
-				})
+			if cell_lock.health > 0.0 {
+				continue;
 			}
-			still_alive
-		});
+			death_particles.push(DeathParticles::for_cell(&cell_lock));
+			dead_ids.push(*id);
+		}
+
+		self.kill_cells(&dead_ids);
+
 		for particles in death_particles {
 			self.spawn_death_particles(particles);
+		}
+	}
+
+	fn kill_cells(&mut self, ids: &[Uuid]) {
+		for id in ids {
+			self.cells.remove(id);
 		}
 	}
 
@@ -103,18 +124,26 @@ impl Simulation {
 			opacity: 0.2
 		})
 	}
+
+	fn get_cells_without(&self, id: Uuid) -> Vec<&Mutex<Cell>> {
+		self.cells
+			.iter()
+			.filter_map(|(other_id, other_cell)| {
+				if id == *other_id {
+					None
+				} else {
+					Some(other_cell)
+				}
+			})
+			.collect()
+	}
 }
 
 impl Tick for Simulation {
 	fn tick(&mut self, dt: f64) {
-		for (i, cell) in self.cells.iter().enumerate() {
+		for (id, cell) in &self.cells {
 			let mut cell_lock = cell.lock().unwrap();
-			let other_cells: Vec<&Mutex<Cell>> = self
-				.cells
-				.iter()
-				.enumerate()
-				.filter_map(|(j, cell)| if i == j { None } else { Some(cell) })
-				.collect();
+			let other_cells = self.get_cells_without(*id);
 			cell_lock.tick(&self.ecs, dt, &other_cells);
 		}
 		self.kill_dead_cells();
@@ -123,7 +152,7 @@ impl Tick for Simulation {
 
 impl ObjectProvider<layers::dots::Dot> for Simulation {
 	fn iter_objects(&self) -> Box<dyn Iterator<Item = layers::dots::Dot> + '_> {
-		let iter = self.cells.iter().map(|cell| cell.into());
+		let iter = self.cells.values().map(|cell| cell.into());
 		Box::new(iter)
 	}
 }
