@@ -17,12 +17,6 @@ use winit::{
 	window::{Theme, WindowBuilder}
 };
 
-#[cfg(unix)]
-use winit::platform::unix::WindowBuilderExtUnix;
-
-#[cfg(windows)]
-use winit::platform::windows::WindowBuilderExtWindows;
-
 pub trait Renderer {
 	fn draw(&mut self, size: LogicalSize<f32>);
 }
@@ -131,23 +125,10 @@ impl Window {
 	}
 
 	fn create_window_builder(title: &str) -> WindowBuilder {
-		let mut builder = WindowBuilder::new()
+		WindowBuilder::new()
 			.with_title(title)
-			.with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
-
-		#[cfg(unix)]
-		{
-			builder = builder
-				.with_gtk_theme_variant(String::from("dark"))
-				.with_wayland_csd_theme(Theme::Dark);
-		}
-
-		#[cfg(windows)]
-		{
-			builder = builder.with_theme(Some(Theme::Dark));
-		}
-
-		builder
+			.with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT))
+			.with_theme(Some(Theme::Dark))
 	}
 
 	fn create_surface(
